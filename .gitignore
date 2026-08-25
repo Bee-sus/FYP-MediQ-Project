@@ -3,6 +3,7 @@ node_modules/
 coverage/
 *.log
 ml-service/.venv/
-ml-service/__pycache__/
+__pycache__/
+*.py[cod]
 ml-service/models/*.joblib
 !ml-service/models/.gitkeep

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="MediQ clinic queue management system development preview" />
+    <title>MediQ | Development Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#">Medi<span>Q</span></a>
+      <span class="development-badge">Development preview</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Clinic queue management</p>
+          <h1>Less uncertainty.<br />A better waiting experience.</h1>
+          <p class="hero-description">
+            MediQ is a web-based system designed to let patients join queues remotely,
+            monitor their progress and receive an estimated waiting time.
+          </p>
+          <div class="actions">
+            <button type="button" disabled>Join a queue</button>
+            <span>Patient features coming in the next milestone</span>
+          </div>
+        </div>
+
+        <aside class="queue-preview" aria-label="Sample queue status">
+          <div class="preview-header">
+            <div>
+              <p>General consultation</p>
+              <span>Sample queue preview</span>
+            </div>
+            <span class="live-indicator">Prototype</span>
+          </div>
+          <div class="queue-number">
+            <span>Your number</span>
+            <strong>A-012</strong>
+          </div>
+          <div class="queue-statistics">
+            <div><strong>3</strong><span>People ahead</span></div>
+            <div><strong>~24 min</strong><span>Estimated wait</span></div>
+          </div>
+          <p class="preview-note">Static demonstration data — live queue logic is not implemented yet.</p>
+        </aside>
+      </section>
+
+      <section class="progress-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Development progress</p>
+            <h2>Initial system foundation</h2>
+          </div>
+          <span id="server-status" class="server-status">Checking server…</span>
+        </div>
+        <div class="progress-grid">
+          <article><span>01</span><h3>Web foundation</h3><p>Node.js, Express and a responsive frontend have been initialized.</p></article>
+          <article><span>02</span><h3>Database design</h3><p>An initial MySQL schema covers users, services, queues and predictions.</p></article>
+          <article><span>03</span><h3>ML integration</h3><p>A separate Python service boundary is prepared for the prediction model.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer>MediQ Final Year Project · Initial development milestone</footer>
+    <script src="app.js"></script>
+  </body>
+</html>

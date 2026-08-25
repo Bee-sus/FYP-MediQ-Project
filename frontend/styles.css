@@ -1,0 +1,80 @@
+:root {
+  --ink: #14213d;
+  --muted: #667085;
+  --blue: #2563eb;
+  --blue-dark: #1748b5;
+  --blue-soft: #eef4ff;
+  --green: #138a5b;
+  --line: #e5eaf1;
+  --surface: #f7f9fc;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: white;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.site-header {
+  width: min(1120px, calc(100% - 40px));
+  margin: auto;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { color: var(--ink); font-size: 25px; font-weight: 700; text-decoration: none; }
+.brand span { color: var(--blue); }
+.development-badge { padding: 8px 12px; border-radius: 99px; color: var(--blue-dark); background: var(--blue-soft); font-size: 12px; font-weight: 600; }
+
+main { width: min(1120px, calc(100% - 40px)); margin: auto; }
+.hero { min-height: 570px; display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: 72px; }
+.eyebrow { margin: 0 0 12px; color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+h1 { margin: 0; max-width: 650px; font-size: clamp(42px, 5.5vw, 70px); line-height: 1.04; letter-spacing: -0.045em; }
+.hero-description { max-width: 590px; margin: 24px 0; color: var(--muted); font-size: 18px; line-height: 1.7; }
+.actions { display: flex; align-items: center; gap: 16px; }
+.actions button { padding: 13px 20px; border: 0; border-radius: 9px; color: white; background: var(--blue); font: inherit; font-weight: 600; opacity: 0.65; }
+.actions span { color: var(--muted); font-size: 12px; }
+
+.queue-preview { padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: white; box-shadow: 0 24px 60px rgba(20, 33, 61, 0.12); }
+.preview-header { display: flex; align-items: flex-start; justify-content: space-between; }
+.preview-header p { margin: 0 0 5px; font-weight: 700; }
+.preview-header div span, .preview-note { color: var(--muted); font-size: 12px; }
+.live-indicator { padding: 6px 9px; border-radius: 99px; color: var(--green); background: #eaf8f2; font-size: 11px; font-weight: 700; }
+.queue-number { margin: 30px 0; padding: 28px; border-radius: 16px; text-align: center; background: var(--blue-soft); }
+.queue-number span { display: block; margin-bottom: 7px; color: var(--blue-dark); font-size: 12px; }
+.queue-number strong { color: var(--blue-dark); font-size: 48px; letter-spacing: -0.04em; }
+.queue-statistics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.queue-statistics div { padding: 17px; border: 1px solid var(--line); border-radius: 12px; }
+.queue-statistics strong, .queue-statistics span { display: block; }
+.queue-statistics span { margin-top: 5px; color: var(--muted); font-size: 11px; }
+.preview-note { margin: 18px 0 0; text-align: center; }
+
+.progress-section { padding: 72px 0; border-top: 1px solid var(--line); }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
+h2 { margin: 0; font-size: 32px; letter-spacing: -0.025em; }
+.server-status { color: var(--muted); font-size: 12px; }
+.server-status.connected { color: var(--green); }
+.progress-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.progress-grid article { padding: 25px; border-radius: 16px; background: var(--surface); }
+.progress-grid article > span { color: var(--blue); font-size: 12px; font-weight: 700; }
+.progress-grid h3 { margin: 20px 0 10px; font-size: 17px; }
+.progress-grid p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+footer { padding: 28px 20px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
+
+@media (max-width: 800px) {
+  .hero { padding: 70px 0; grid-template-columns: 1fr; gap: 45px; }
+  .progress-grid { grid-template-columns: 1fr; }
+  .section-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
+}
+
+@media (max-width: 520px) {
+  .actions { align-items: flex-start; flex-direction: column; }
+  .queue-statistics { grid-template-columns: 1fr; }
+  .development-badge { display: none; }
+}

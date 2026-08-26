@@ -36,5 +36,7 @@ describe('system endpoints', () => {
     expect(response.text).toContain('Book appointments');
     expect(response.text).toContain('Instant notifications');
     expect(response.text).toContain('Three simple steps');
+    expect(response.text).not.toContain('Development progress');
+    expect(response.text).not.toContain('Database not connected');
   });
 });

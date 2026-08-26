@@ -59,6 +59,8 @@ function showDevelopmentNotice(feature) {
 function configureHomepageControls() {
   const audienceMessage = document.querySelector('#audience-message');
   const roleButtons = document.querySelectorAll('.role-button');
+  const signInButton = document.querySelector('#sign-in-button');
+  const registerButton = document.querySelector('#register-button');
 
   roleButtons.forEach((button) => {
     button.addEventListener('click', () => {
@@ -69,9 +71,14 @@ function configureHomepageControls() {
       });
 
       const role = button.dataset.role;
-      audienceMessage.textContent = role === 'admin'
-        ? 'Admin access selected.'
-        : 'Patient access selected.';
+      const isAdmin = role === 'admin';
+
+      signInButton.textContent = isAdmin ? 'Staff sign in' : 'Sign in';
+      signInButton.dataset.demoAction = isAdmin ? 'Staff sign in' : 'Patient sign in';
+      registerButton.hidden = isAdmin;
+      audienceMessage.textContent = isAdmin
+        ? 'Staff accounts are issued by the clinic administrator.'
+        : 'New patients can register for an account.';
     });
   });
 

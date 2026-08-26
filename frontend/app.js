@@ -74,7 +74,7 @@ function configureHomepageControls() {
       const isAdmin = role === 'admin';
 
       signInButton.textContent = isAdmin ? 'Staff sign in' : 'Sign in';
-      signInButton.dataset.demoAction = isAdmin ? 'Staff sign in' : 'Patient sign in';
+      signInButton.href = isAdmin ? '/staff-login.html' : '/patient-login.html';
       registerButton.hidden = isAdmin;
       audienceMessage.textContent = isAdmin
         ? 'Staff accounts are issued by the clinic administrator.'

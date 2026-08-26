@@ -39,4 +39,15 @@ describe('system endpoints', () => {
     expect(response.text).not.toContain('Development progress');
     expect(response.text).not.toContain('Database not connected');
   });
+
+  test.each([
+    ['/patient-login.html', 'Patient sign in'],
+    ['/register.html', 'Patient registration'],
+    ['/staff-login.html', 'Staff sign in'],
+  ])('serves the authentication page %s', async (path, heading) => {
+    const response = await request(app).get(path);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.text).toContain(heading);
+  });
 });

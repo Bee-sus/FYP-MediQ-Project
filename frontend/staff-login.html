@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Staff sign in for MediQ" />
+    <title>Staff Sign In | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body>
+    <aside class="auth-introduction">
+      <a class="brand" href="/">Medi<span>Q</span></a>
+      <div class="auth-introduction-copy">
+        <p class="eyebrow">Clinic staff access</p>
+        <h1>Manage each queue with confidence.</h1>
+        <p>Authorised clinic staff can access queue operations, appointments, services and performance analytics.</p>
+      </div>
+      <a class="back-link" href="/">← Back to homepage</a>
+    </aside>
+    <main class="auth-main">
+      <section class="auth-card" aria-labelledby="staff-login-heading">
+        <p class="eyebrow">Restricted access</p>
+        <h2 id="staff-login-heading">Staff sign in</h2>
+        <p class="auth-subtitle">Staff accounts are issued and managed by the clinic administrator.</p>
+        <form class="auth-form" data-auth-form="staff-login">
+          <div class="form-group">
+            <label for="staff-email">Staff email address</label>
+            <input id="staff-email" name="email" type="email" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+          </div>
+          <div class="form-options">
+            <label class="checkbox-label"><input type="checkbox" name="remember" /> Keep me signed in</label>
+            <a class="text-link" href="#">Contact administrator</a>
+          </div>
+          <button class="submit-button" type="submit">Staff sign in</button>
+          <p id="form-status" class="form-status" role="status" hidden></p>
+        </form>
+        <p class="auth-alternative">Are you a patient? <a href="/patient-login.html">Use patient sign in</a></p>
+      </section>
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>

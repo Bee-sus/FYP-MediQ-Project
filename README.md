@@ -8,6 +8,7 @@ This repository contains the initial development milestone for MediQ, a web-base
 - Responsive development-preview interface
 - Homepage feature set based on the approved FYP prototype
 - Patient/Admin access selection and Sign In/Register previews
+- Separate patient sign-in, patient-registration and staff sign-in pages
 - Smart queue, appointment and notification feature cards
 - Three-step patient journey section
 - Clinic services loaded dynamically from the Express API

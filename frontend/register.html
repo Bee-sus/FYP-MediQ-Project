@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Patient registration for MediQ" />
+    <title>Patient Registration | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body>
+    <aside class="auth-introduction">
+      <a class="brand" href="/">Medi<span>Q</span></a>
+      <div class="auth-introduction-copy">
+        <p class="eyebrow">Patient registration</p>
+        <h1>Plan your visit with less waiting.</h1>
+        <p>Create a patient account to join queues remotely, book appointments and receive clinic updates.</p>
+      </div>
+      <a class="back-link" href="/">← Back to homepage</a>
+    </aside>
+    <main class="auth-main">
+      <section class="auth-card" aria-labelledby="register-heading">
+        <p class="eyebrow">Create an account</p>
+        <h2 id="register-heading">Patient registration</h2>
+        <p class="auth-subtitle">Complete the form using your current contact information.</p>
+        <form class="auth-form" data-auth-form="register">
+          <div class="form-group">
+            <label for="full-name">Full name</label>
+            <input id="full-name" name="fullName" type="text" autocomplete="name" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="email">Email address</label>
+              <input id="email" name="email" type="email" autocomplete="email" required />
+            </div>
+            <div class="form-group">
+              <label for="phone">Phone number</label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="birth-date">Date of birth</label>
+              <input id="birth-date" name="birthDate" type="date" autocomplete="bday" required />
+            </div>
+            <div class="form-group">
+              <label for="gender">Gender</label>
+              <select id="gender" name="gender" required>
+                <option value="">Select</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+                <option value="prefer-not-to-say">Prefer not to say</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />
+              <p class="form-help">Use at least 8 characters.</p>
+            </div>
+            <div class="form-group">
+              <label for="confirm-password">Confirm password</label>
+              <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
+            </div>
+          </div>
+          <label class="checkbox-label"><input type="checkbox" name="terms" required /> I agree to the account and privacy terms.</label>
+          <button class="submit-button" type="submit">Create patient account</button>
+          <p id="form-status" class="form-status" role="status" hidden></p>
+        </form>
+        <p class="auth-alternative">Already registered? <a href="/patient-login.html">Sign in</a></p>
+      </section>
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>

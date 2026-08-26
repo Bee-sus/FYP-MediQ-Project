@@ -41,7 +41,7 @@ main { width: min(1120px, calc(100% - 40px)); margin: auto; }
 h1 { margin: 0; max-width: 650px; font-size: clamp(42px, 5.5vw, 70px); line-height: 1.04; letter-spacing: -0.045em; }
 .hero-description { max-width: 590px; margin: 24px 0; color: var(--muted); font-size: 18px; line-height: 1.7; }
 .actions { display: flex; align-items: center; gap: 16px; }
-.actions button { padding: 13px 20px; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; }
+.action-button { padding: 13px 20px; border-radius: 9px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
 .primary-action { border: 1px solid var(--blue); color: white; background: var(--blue); }
 .secondary-action { border: 1px solid var(--line); color: var(--ink); background: white; }
 .audience-message { margin: 13px 0 0; color: var(--muted); font-size: 12px; }
@@ -90,7 +90,7 @@ h2 { margin: 0; font-size: 32px; letter-spacing: -0.025em; }
 footer { padding: 28px 20px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
 .demo-notice { position: fixed; right: 22px; bottom: 22px; z-index: 10; max-width: 360px; padding: 14px 18px; border-radius: 12px; color: white; background: var(--ink); box-shadow: 0 16px 35px rgba(20, 33, 61, 0.24); font-size: 13px; line-height: 1.5; }
 .demo-notice[hidden] { display: none; }
-.role-button:focus-visible, .actions button:focus-visible, .feature-link:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 3px; }
+.role-button:focus-visible, .action-button:focus-visible, .feature-link:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 3px; }
 
 @media (max-width: 800px) {
   .hero { padding: 70px 0; grid-template-columns: 1fr; gap: 45px; }

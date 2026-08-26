@@ -30,7 +30,11 @@ body {
 
 .brand { color: var(--ink); font-size: 25px; font-weight: 700; text-decoration: none; }
 .brand span { color: var(--blue); }
+.header-actions { display: flex; align-items: center; gap: 12px; }
 .development-badge { padding: 8px 12px; border-radius: 99px; color: var(--blue-dark); background: var(--blue-soft); font-size: 12px; font-weight: 600; }
+.role-switch { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.role-button { padding: 7px 12px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.role-button.active { color: white; background: var(--ink); }
 
 main { width: min(1120px, calc(100% - 40px)); margin: auto; }
 .hero { min-height: 570px; display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: 72px; }
@@ -38,8 +42,10 @@ main { width: min(1120px, calc(100% - 40px)); margin: auto; }
 h1 { margin: 0; max-width: 650px; font-size: clamp(42px, 5.5vw, 70px); line-height: 1.04; letter-spacing: -0.045em; }
 .hero-description { max-width: 590px; margin: 24px 0; color: var(--muted); font-size: 18px; line-height: 1.7; }
 .actions { display: flex; align-items: center; gap: 16px; }
-.actions button { padding: 13px 20px; border: 0; border-radius: 9px; color: white; background: var(--blue); font: inherit; font-weight: 600; opacity: 0.65; }
-.actions span { color: var(--muted); font-size: 12px; }
+.actions button { padding: 13px 20px; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; }
+.primary-action { border: 1px solid var(--blue); color: white; background: var(--blue); }
+.secondary-action { border: 1px solid var(--line); color: var(--ink); background: white; }
+.audience-message { margin: 13px 0 0; color: var(--muted); font-size: 12px; }
 
 .queue-preview { padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: white; box-shadow: 0 24px 60px rgba(20, 33, 61, 0.12); }
 .preview-header { display: flex; align-items: flex-start; justify-content: space-between; }
@@ -54,6 +60,22 @@ h1 { margin: 0; max-width: 650px; font-size: clamp(42px, 5.5vw, 70px); line-heig
 .queue-statistics strong, .queue-statistics span { display: block; }
 .queue-statistics span { margin-top: 5px; color: var(--muted); font-size: 11px; }
 .preview-note { margin: 18px 0 0; text-align: center; }
+
+.features-section { padding: 72px 0; border-top: 1px solid var(--line); }
+.feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.feature-card { display: flex; min-height: 270px; padding: 26px; flex-direction: column; border: 1px solid var(--line); border-radius: 18px; background: white; box-shadow: 0 15px 35px rgba(20, 33, 61, 0.07); }
+.feature-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: var(--blue-dark); background: var(--blue-soft); font-size: 16px; font-weight: 700; }
+.feature-card h3 { margin: 24px 0 10px; font-size: 18px; }
+.feature-card p { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.feature-link { margin-top: auto; padding: 0; border: 0; color: var(--blue); background: transparent; font: inherit; font-size: 13px; font-weight: 700; text-align: left; cursor: pointer; }
+
+.workflow-section { margin-bottom: 72px; padding: 34px; display: grid; grid-template-columns: 0.7fr 2fr; gap: 40px; align-items: center; border-radius: 20px; background: var(--blue-soft); }
+.workflow-copy h2 { font-size: 28px; }
+.workflow-list { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; list-style: none; }
+.workflow-list li { display: flex; gap: 12px; }
+.workflow-list li > span { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--blue); font-size: 12px; font-weight: 700; }
+.workflow-list strong { font-size: 13px; }
+.workflow-list p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 .services-section { padding: 72px 0; border-top: 1px solid var(--line); }
 .data-label { color: var(--muted); font-size: 12px; }
@@ -78,10 +100,15 @@ h2 { margin: 0; font-size: 32px; letter-spacing: -0.025em; }
 .progress-grid h3 { margin: 20px 0 10px; font-size: 17px; }
 .progress-grid p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
 footer { padding: 28px 20px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
+.demo-notice { position: fixed; right: 22px; bottom: 22px; z-index: 10; max-width: 360px; padding: 14px 18px; border-radius: 12px; color: white; background: var(--ink); box-shadow: 0 16px 35px rgba(20, 33, 61, 0.24); font-size: 13px; line-height: 1.5; }
+.demo-notice[hidden] { display: none; }
+.role-button:focus-visible, .actions button:focus-visible, .feature-link:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 3px; }
 
 @media (max-width: 800px) {
   .hero { padding: 70px 0; grid-template-columns: 1fr; gap: 45px; }
-  .progress-grid, .services-grid { grid-template-columns: 1fr; }
+  .progress-grid, .services-grid, .feature-grid { grid-template-columns: 1fr; }
+  .workflow-section { grid-template-columns: 1fr; }
+  .workflow-list { grid-template-columns: 1fr; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
 }
 
@@ -89,4 +116,7 @@ footer { padding: 28px 20px; border-top: 1px solid var(--line); color: var(--mut
   .actions { align-items: flex-start; flex-direction: column; }
   .queue-statistics { grid-template-columns: 1fr; }
   .development-badge { display: none; }
+  .site-header { align-items: flex-start; padding: 18px 0; }
+  .header-actions { align-items: flex-end; flex-direction: column; }
+  .workflow-section { padding: 24px; }
 }

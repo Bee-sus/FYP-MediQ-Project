@@ -56,5 +56,49 @@ async function loadClinicServices() {
   }
 }
 
+let noticeTimer;
+
+function showDevelopmentNotice(feature) {
+  const notice = document.querySelector('#demo-notice');
+  notice.textContent = `${feature} is represented in the homepage prototype and will become functional in a later development milestone.`;
+  notice.hidden = false;
+
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => {
+    notice.hidden = true;
+  }, 4500);
+}
+
+function configureHomepageControls() {
+  const audienceMessage = document.querySelector('#audience-message');
+  const roleButtons = document.querySelectorAll('.role-button');
+
+  roleButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      roleButtons.forEach((roleButton) => {
+        const isSelected = roleButton === button;
+        roleButton.classList.toggle('active', isSelected);
+        roleButton.setAttribute('aria-pressed', String(isSelected));
+      });
+
+      const role = button.dataset.role;
+      audienceMessage.textContent = role === 'admin'
+        ? 'Admin access selected · queue management and analytics will appear here.'
+        : 'Patient access selected · queue and appointment tools will appear here.';
+    });
+  });
+
+  document.querySelectorAll('[data-demo-action]').forEach((button) => {
+    button.addEventListener('click', () => showDevelopmentNotice(button.dataset.demoAction));
+  });
+
+  document.querySelectorAll('[data-scroll-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelector(button.dataset.scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+}
+
 updateServerStatus();
 loadClinicServices();
+configureHomepageControls();

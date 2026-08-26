@@ -6,6 +6,11 @@ This repository contains the initial development milestone for MediQ, a web-base
 
 - Working Node.js and Express application scaffold
 - Responsive development-preview interface
+- Homepage feature set based on the approved FYP prototype
+- Patient/Admin access selection and Sign In/Register previews
+- Smart queue, appointment and notification feature cards
+- Three-step patient journey section
+- Clinic services loaded dynamically from the Express API
 - Health and project-status API endpoints
 - Configurable MySQL connection
 - Initial database schema for users, services, queues and predictions
@@ -33,7 +38,7 @@ npm install
 npm run dev
 ```
 
-5. Open `http://localhost:3000`.
+5. Open `http://localhost:3000`. If that port is already occupied, set another one first, for example `$env:PORT=3100` in PowerShell.
 
 The preview page still runs if MySQL has not been configured; its health label will report that the database is not connected.
 
@@ -51,10 +56,12 @@ API documentation will be available at `http://127.0.0.1:8000/docs`.
 ## Suggested supervisor demonstration
 
 1. Show the folder structure and explain the client-server separation.
-2. Start the Node.js server and open the development-preview page.
+2. Start the Node.js server and demonstrate the completed homepage sections.
 3. Visit `http://localhost:3000/api/project-status` to show the first backend endpoint.
 4. Open `database/schema.sql` and explain the first four entities.
-5. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
+5. Demonstrate that the clinic-service cards are loaded through `/api/services`.
+6. Explain that authentication, appointment submission and notifications are currently honest UI previews rather than completed backend workflows.
+7. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
 
 ## Next milestone
 

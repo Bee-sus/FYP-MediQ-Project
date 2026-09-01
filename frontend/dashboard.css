@@ -1,0 +1,380 @@
+.dashboard-shell {
+min-height:calc(100vh - 77px);
+padding:70px 0;
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:32px;
+align-items:center
+}
+.dashboard-welcome h1 {
+font-size:clamp(38px,5vw,60px)
+}
+.dashboard-welcome p {
+color:var(--muted);
+line-height:1.7
+}
+.dashboard-card {
+padding:32px;
+border:1px solid var(--line);
+border-radius:20px;
+box-shadow:0 20px 50px rgba(20,33,61,.1)
+}
+.dashboard-card h2 {
+margin:22px 0 12px
+}
+.dashboard-card p {
+margin:0 0 26px;
+color:var(--muted);
+line-height:1.7
+}
+@media(max-width:760px) {
+.dashboard-shell {
+grid-template-columns:1fr;
+padding:45px 0
+}
+
+}
+
+.portal-body {
+background:var(--surface)
+}
+.portal-header {
+height:74px;
+padding:0 clamp(20px,4vw,54px);
+display:flex;
+align-items:center;
+justify-content:space-between;
+border-bottom:1px solid var(--line);
+background:#fff
+}
+.portal-account {
+display:flex;
+align-items:center;
+gap:18px;
+font-size:13px;
+font-weight:600
+}
+.portal-layout {
+min-height:calc(100vh - 74px);
+display:grid;
+grid-template-columns:230px 1fr
+}
+.portal-nav {
+padding:30px 18px;
+display:flex;
+flex-direction:column;
+gap:7px;
+border-right:1px solid var(--line);
+background:#fff
+}
+.portal-nav a,.portal-nav button {
+width:100%;
+padding:12px 14px;
+display:flex;
+align-items:center;
+gap:11px;
+border:0;
+border-radius:9px;
+color:var(--muted);
+background:transparent;
+font:inherit;
+font-size:13px;
+text-align:left;
+text-decoration:none;
+cursor:pointer
+}
+.portal-nav a.active {
+color:var(--blue-dark);
+background:var(--blue-soft);
+font-weight:700
+}
+.portal-nav a span,.portal-nav button span {
+width:20px;
+text-align:center
+}
+.portal-nav small {
+margin-left:auto;
+padding:3px 6px;
+border-radius:20px;
+background:#edf0f5;
+font-size:8px;
+text-transform:uppercase
+}
+.patient-main {
+width:min(1050px,calc(100% - 56px));
+margin:0 auto;
+padding:52px 0 80px
+}
+.patient-heading {
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+margin-bottom:45px
+}
+.patient-heading h1 {
+font-size:clamp(32px,4vw,48px)
+}
+.patient-heading>div>p:last-child {
+margin:13px 0 0;
+color:var(--muted)
+}
+.date-chip,.prototype-tag {
+margin:0;
+padding:8px 11px;
+border:1px solid var(--line);
+border-radius:99px;
+color:var(--muted);
+background:#fff;
+font-size:11px
+}
+.dashboard-section {
+margin-top:54px
+}
+.dashboard-section-heading {
+margin-bottom:20px;
+display:flex;
+align-items:flex-end;
+justify-content:space-between
+}
+.dashboard-section-heading h2 {
+font-size:25px
+}
+.queue-dashboard-card {
+min-height:210px;
+padding:28px;
+border:1px solid var(--line);
+border-radius:18px;
+background:#fff;
+box-shadow:0 14px 34px rgba(20,33,61,.06)
+}
+.empty-queue {
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:24px
+}
+.empty-queue>div {
+max-width:520px
+}
+.empty-queue h3 {
+margin:12px 0 7px
+}
+.empty-queue p,.dashboard-empty p {
+margin:0;
+color:var(--muted);
+font-size:13px;
+line-height:1.6
+}
+.empty-icon {
+width:42px;
+height:42px;
+display:grid;
+place-items:center;
+border-radius:11px;
+color:var(--blue);
+background:var(--blue-soft);
+font-weight:700
+}
+.active-queue {
+display:grid;
+grid-template-columns:220px 1fr;
+gap:30px
+}
+.queue-identity {
+padding:22px;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+border-radius:13px;
+background:var(--blue-soft)
+}
+.queue-identity span,.queue-identity small {
+color:var(--blue-dark);
+font-size:11px
+}
+.queue-identity strong {
+margin:8px 0;
+color:var(--blue-dark);
+font-size:46px
+}
+.queue-metrics {
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:12px;
+align-items:stretch
+}
+.queue-metrics div {
+padding:20px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+border:1px solid var(--line);
+border-radius:12px
+}
+.queue-metrics span {
+margin-bottom:8px;
+color:var(--muted);
+font-size:11px
+}
+.patient-services {
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:14px
+}
+.patient-service-card {
+padding:22px;
+display:flex;
+min-height:190px;
+flex-direction:column;
+border:1px solid var(--line);
+border-radius:15px;
+background:#fff
+}
+.patient-service-card h3 {
+margin:0 0 9px;
+font-size:16px
+}
+.patient-service-card p {
+margin:0;
+color:var(--muted);
+font-size:12px;
+line-height:1.6
+}
+.service-card-footer {
+margin-top:auto;
+padding-top:18px;
+display:flex;
+align-items:center;
+justify-content:space-between;
+border-top:1px solid var(--line)
+}
+.service-card-footer span {
+color:var(--blue-dark);
+font-size:11px;
+font-weight:600
+}
+.service-card-footer button {
+padding:8px 10px;
+border:0;
+border-radius:7px;
+color:var(--muted);
+background:#edf0f5;
+font:inherit;
+font-size:10px
+}
+.history-card {
+overflow:hidden;
+border:1px solid var(--line);
+border-radius:15px;
+background:#fff
+}
+.history-list>.dashboard-empty {
+padding:35px;
+text-align:center
+}
+.history-row {
+padding:17px 21px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border-bottom:1px solid var(--line)
+}
+.history-row:last-child {
+border-bottom:0
+}
+.history-row>div {
+display:flex;
+flex-direction:column;
+gap:5px
+}
+.history-row>div:last-child {
+align-items:flex-end
+}
+.history-row strong {
+font-size:13px
+}
+.history-row span {
+color:var(--muted);
+font-size:10px
+}
+.history-status {
+text-transform:capitalize
+}
+.history-number {
+color:var(--blue-dark)
+}
+.dashboard-loading {
+color:var(--muted);
+font-size:13px
+}
+.dashboard-alert {
+padding:13px 15px;
+border-radius:10px;
+color:#b42318;
+background:#fff0ee;
+font-size:12px
+}
+.dashboard-alert[hidden] {
+display:none
+}
+
+@media(max-width:900px) {
+.portal-layout {
+grid-template-columns:1fr
+}
+.portal-nav {
+padding:10px 20px;
+overflow-x:auto;
+flex-direction:row;
+border-right:0;
+border-bottom:1px solid var(--line)
+}
+.portal-nav a,.portal-nav button {
+width:auto;
+white-space:nowrap
+}
+.patient-main {
+width:min(100% - 36px,760px)
+}
+.active-queue {
+grid-template-columns:1fr
+}
+.patient-services {
+grid-template-columns:1fr
+}
+
+}
+
+@media(max-width:600px) {
+.portal-header {
+height:auto;
+padding:16px 18px
+}
+.portal-account>span {
+display:none
+}
+.patient-heading {
+gap:20px;
+flex-direction:column
+}
+.date-chip {
+align-self:flex-start
+}
+.empty-queue {
+align-items:flex-start;
+flex-direction:column
+}
+.queue-metrics {
+grid-template-columns:1fr
+}
+.dashboard-section-heading {
+align-items:flex-start;
+gap:13px;
+flex-direction:column
+}
+.portal-nav button small {
+display:none
+}
+
+}

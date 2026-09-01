@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Dashboard | MediQ</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <button id="logout-button" class="action-button secondary-action" type="button">Sign out</button>
+    </header>
+
+    <main class="dashboard-shell">
+      <section class="dashboard-welcome">
+        <p id="role-label" class="eyebrow">Checking secure access</p>
+        <h1 id="welcome-heading">Loading your dashboard…</h1>
+        <p id="dashboard-message">Please wait while MediQ verifies your session.</p>
+      </section>
+      <section class="dashboard-card" aria-labelledby="prototype-heading">
+        <span class="live-indicator">Authenticated prototype</span>
+        <h2 id="prototype-heading">Secure dashboard entry is working</h2>
+        <p>
+          Your account and role have been verified by the server. Queue, appointment and management modules will
+          be added here in the next development stage.
+        </p>
+        <a class="action-button primary-action" href="/">Return to homepage</a>
+      </section>
+    </main>
+    <script src="dashboard.js"></script>
+  </body>
+</html>

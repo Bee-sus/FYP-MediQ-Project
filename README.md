@@ -10,6 +10,8 @@ This repository contains the initial development milestone for MediQ, a web-base
 - Clearly separated Patient, Staff and Administrator access with three sign-in pages
 - Public patient registration only; Staff and Administrator accounts are clinic-issued
 - Accessible live registration validation and strong-password guidance
+- MySQL-backed patient registration, password hashing and secure role-aware sessions
+- Protected Patient, Staff and Administrator dashboard entry
 - Draft Terms and Conditions and Privacy Notice for supervisor review
 - Smart queue, appointment and notification feature cards
 - Three-step patient journey section
@@ -34,6 +36,7 @@ ml-service/    Python/FastAPI prediction-service boundary
 1. Install Node.js and MySQL.
 2. Copy `.env.example` to `.env` and update the database settings.
 3. Run `database/schema.sql` using MySQL Workbench.
+   Alternatively, add your database credentials and controlled demo accounts to `.env`, then run `npm run db:setup`.
 4. Install dependencies and start the server:
 
 ```bash
@@ -43,7 +46,9 @@ npm run dev
 
 5. Open `http://localhost:3000`. If that port is already occupied, set another one first, for example `$env:PORT=3100` in PowerShell.
 
-The preview page still runs if MySQL has not been configured; its health label will report that the database is not connected.
+The public pages still load if MySQL has not been configured, but registration and sign-in will clearly report that account services are unavailable.
+
+Staff and Administrator accounts are never publicly registered. Configure `SEED_STAFF_*` and `SEED_ADMIN_*` in `.env`; `npm run db:setup` creates or refreshes those controlled demonstration accounts using scrypt password hashes.
 
 ## Run the prediction-service stub
 
@@ -66,7 +71,7 @@ API documentation will be available at `http://127.0.0.1:8000/docs`.
 6. Demonstrate invalid and valid registration values, the live password checklist, password visibility and confirmation matching.
 7. Switch among Patient, Staff and Administrator on the homepage and show the separate restricted sign-in pages.
 8. Open the Terms and Privacy page and point out the items that the clinic must confirm before deployment.
-9. Explain that authentication, account persistence, appointment submission and notifications are currently honest UI previews rather than completed backend workflows.
+9. Register a patient, sign in, show the role-aware dashboard and sign out. Explain that appointment submission, queue operations and notifications are the next backend workflows.
 10. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
 
 ## Next milestone

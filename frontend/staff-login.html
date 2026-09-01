@@ -32,7 +32,10 @@
           </div>
           <div class="form-group">
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+            <div class="password-input">
+              <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+              <button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password">Show</button>
+            </div>
           </div>
           <div class="form-options">
             <label class="checkbox-label"><input type="checkbox" name="remember" /> Keep me signed in</label>

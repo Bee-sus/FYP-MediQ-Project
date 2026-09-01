@@ -1,3 +1,67 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="description" content="Restricted MediQ administrator sign in"/><title>Administrator Sign In | MediQ</title><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/><link rel="stylesheet" href="auth.css"/></head><body>
-<aside class="auth-introduction"><a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a><div class="auth-introduction-copy"><p class="eyebrow">Administrator access</p><h1>Control access and clinic settings.</h1><p>This portal is restricted to designated system administrators. Administrator accounts cannot be registered publicly.</p></div><a class="back-link" href="/">← Back to homepage</a></aside>
-<main class="auth-main"><section class="auth-card" aria-labelledby="admin-login-heading"><p class="eyebrow">Restricted access</p><h2 id="admin-login-heading">Administrator sign in</h2><p class="auth-subtitle">Use the credentials issued through the clinic's controlled account process.</p><form class="auth-form" data-auth-form="admin-login"><div class="form-group"><label for="admin-email">Administrator email address</label><input id="admin-email" name="email" type="email" autocomplete="username" required/></div><div class="form-group"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required/></div><button class="submit-button" type="submit">Administrator sign in</button><p id="form-status" class="form-status" role="status" hidden></p></form><p class="auth-alternative">Not an administrator? <a href="/patient-login.html">Patient sign in</a> · <a href="/staff-login.html">Staff sign in</a></p></section></main><script src="auth.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Restricted MediQ administrator sign in" />
+    <title>Administrator Sign In | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body>
+    <aside class="auth-introduction">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="auth-introduction-copy">
+        <p class="eyebrow">Administrator access</p>
+        <h1>Control access and clinic settings.</h1>
+        <p>
+          This portal is restricted to designated system administrators. Administrator accounts cannot be
+          registered publicly.
+        </p>
+      </div>
+      <a class="back-link" href="/">← Back to homepage</a>
+    </aside>
+
+    <main class="auth-main">
+      <section class="auth-card" aria-labelledby="admin-login-heading">
+        <p class="eyebrow">Restricted access</p>
+        <h2 id="admin-login-heading">Administrator sign in</h2>
+        <p class="auth-subtitle">Use the credentials issued through the clinic's controlled account process.</p>
+
+        <form class="auth-form" data-auth-form="admin-login">
+          <div class="form-group">
+            <label for="admin-email">Administrator email address</label>
+            <input id="admin-email" name="email" type="email" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="password-input">
+              <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required />
+              <button
+                class="password-toggle"
+                type="button"
+                data-password-toggle="password"
+                aria-label="Show password"
+              >
+                Show
+              </button>
+            </div>
+          </div>
+          <button class="submit-button" type="submit">Administrator sign in</button>
+          <p id="form-status" class="form-status" role="status" hidden></p>
+        </form>
+
+        <p class="auth-alternative">
+          Not an administrator? <a href="/patient-login.html">Patient sign in</a> ·
+          <a href="/staff-login.html">Staff sign in</a>
+        </p>
+      </section>
+    </main>
+    <script src="auth.js"></script>
+  </body>
+</html>

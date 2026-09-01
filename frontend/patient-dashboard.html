@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Patient Dashboard | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body class="portal-body">
+    <header class="portal-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="portal-account"><span id="patient-name">Patient</span><button id="logout-button" class="action-button secondary-action" type="button">Sign out</button></div>
+    </header>
+    <div class="portal-layout">
+      <nav class="portal-nav" aria-label="Patient portal">
+        <a class="active" href="/patient-dashboard.html" aria-current="page"><span aria-hidden="true">⌂</span> Overview</a>
+        <a href="#services"><span aria-hidden="true">＋</span> Join queue</a>
+        <button type="button" data-upcoming="Appointments"><span aria-hidden="true">□</span> Appointments <small>Next</small></button>
+        <button type="button" data-upcoming="Notifications"><span aria-hidden="true">○</span> Notifications <small>Next</small></button>
+        <a href="#history"><span aria-hidden="true">↻</span> Queue history</a>
+      </nav>
+      <main class="patient-main">
+        <section class="patient-heading">
+          <div><p class="eyebrow">Patient portal</p><h1 id="welcome-heading">Welcome back</h1><p>View today’s queue and prepare for your next clinic visit.</p></div>
+          <p id="current-date" class="date-chip"></p>
+        </section>
+        <p id="dashboard-alert" class="dashboard-alert" role="status" aria-live="polite" hidden></p>
+
+        <section aria-labelledby="queue-heading">
+          <div class="dashboard-section-heading"><div><p class="eyebrow">Today</p><h2 id="queue-heading">Your queue</h2></div></div>
+          <div id="active-queue" class="queue-dashboard-card" aria-live="polite">
+            <div class="dashboard-loading">Loading your queue status…</div>
+          </div>
+        </section>
+
+        <section id="services" class="dashboard-section" aria-labelledby="services-heading">
+          <div class="dashboard-section-heading"><div><p class="eyebrow">Clinic services</p><h2 id="services-heading">Plan your visit</h2></div><span class="prototype-tag">Queue joining next</span></div>
+          <div id="patient-services" class="patient-services"><p class="dashboard-loading">Loading available services…</p></div>
+        </section>
+
+        <section id="history" class="dashboard-section" aria-labelledby="history-heading">
+          <div class="dashboard-section-heading"><div><p class="eyebrow">Recent activity</p><h2 id="history-heading">Queue history</h2></div></div>
+          <div class="history-card"><div id="queue-history" class="history-list"><p class="dashboard-loading">Loading recent visits…</p></div></div>
+        </section>
+      </main>
+    </div>
+    <div id="portal-notice" class="demo-notice" role="status" aria-live="polite" hidden></div>
+    <script src="patient-dashboard.js"></script>
+  </body>
+</html>

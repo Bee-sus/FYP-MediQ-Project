@@ -1,79 +1,10 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Patient registration for MediQ" />
-    <title>Patient Registration | MediQ</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="auth.css" />
-  </head>
-  <body>
-    <aside class="auth-introduction">
-      <a class="brand" href="/">Medi<span>Q</span></a>
-      <div class="auth-introduction-copy">
-        <p class="eyebrow">Patient registration</p>
-        <h1>Plan your visit with less waiting.</h1>
-        <p>Create a patient account to join queues remotely, book appointments and receive clinic updates.</p>
-      </div>
-      <a class="back-link" href="/">← Back to homepage</a>
-    </aside>
-    <main class="auth-main">
-      <section class="auth-card" aria-labelledby="register-heading">
-        <p class="eyebrow">Create an account</p>
-        <h2 id="register-heading">Patient registration</h2>
-        <p class="auth-subtitle">Complete the form using your current contact information.</p>
-        <form class="auth-form" data-auth-form="register">
-          <div class="form-group">
-            <label for="full-name">Full name</label>
-            <input id="full-name" name="fullName" type="text" autocomplete="name" required />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="email">Email address</label>
-              <input id="email" name="email" type="email" autocomplete="email" required />
-            </div>
-            <div class="form-group">
-              <label for="phone">Phone number</label>
-              <input id="phone" name="phone" type="tel" autocomplete="tel" required />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="birth-date">Date of birth</label>
-              <input id="birth-date" name="birthDate" type="date" autocomplete="bday" required />
-            </div>
-            <div class="form-group">
-              <label for="gender">Gender</label>
-              <select id="gender" name="gender" required>
-                <option value="">Select</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="other">Other</option>
-                <option value="prefer-not-to-say">Prefer not to say</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="password">Password</label>
-              <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required />
-              <p class="form-help">Use at least 8 characters.</p>
-            </div>
-            <div class="form-group">
-              <label for="confirm-password">Confirm password</label>
-              <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
-            </div>
-          </div>
-          <label class="checkbox-label"><input type="checkbox" name="terms" required /> I agree to the account and privacy terms.</label>
-          <button class="submit-button" type="submit">Create patient account</button>
-          <p id="form-status" class="form-status" role="status" hidden></p>
-        </form>
-        <p class="auth-alternative">Already registered? <a href="/patient-login.html">Sign in</a></p>
-      </section>
-    </main>
-    <script src="auth.js"></script>
-  </body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="description" content="Patient registration for MediQ at Clinic name pending"/><title>Patient Registration | MediQ</title><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/><link rel="stylesheet" href="auth.css"/></head>
+<body><aside class="auth-introduction"><a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a><div class="auth-introduction-copy"><p class="eyebrow">Patient registration</p><h1>Plan your visit with less waiting.</h1><p>This public form creates patient accounts only. Staff and administrator access is issued by the clinic.</p></div><a class="back-link" href="/">← Back to homepage</a></aside>
+<main class="auth-main"><section class="auth-card" aria-labelledby="register-heading"><p class="eyebrow">Create an account</p><h2 id="register-heading">Patient registration</h2><p class="auth-subtitle">All fields are required. Validation is shown as you complete each field.</p>
+<form class="auth-form" data-auth-form="register" novalidate>
+<div class="form-group"><label for="full-name">Full name</label><input id="full-name" name="fullName" type="text" autocomplete="name" minlength="2" maxlength="120" pattern="[A-Za-zÀ-ž][A-Za-zÀ-ž .'-]{1,119}" aria-describedby="full-name-error" required/><p class="field-error" id="full-name-error"></p></div>
+<div class="form-row"><div class="form-group"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" maxlength="190" aria-describedby="email-error" required/><p class="field-error" id="email-error"></p></div><div class="form-group"><label for="phone">Phone number</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" pattern="[+]?[0-9 ()-]{8,20}" maxlength="20" aria-describedby="phone-help phone-error" required/><p class="form-help" id="phone-help">8–20 digits; spaces, +, brackets and hyphens are accepted.</p><p class="field-error" id="phone-error"></p></div></div>
+<div class="form-row"><div class="form-group"><label for="birth-date">Date of birth</label><input id="birth-date" name="birthDate" type="date" autocomplete="bday" aria-describedby="birth-date-error" required/><p class="field-error" id="birth-date-error"></p></div><div class="form-group"><label for="gender">Gender</label><select id="gender" name="gender" aria-describedby="gender-error" required><option value="">Select</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="prefer-not-to-say">Prefer not to say</option></select><p class="field-error" id="gender-error"></p></div></div>
+<div class="form-row"><div class="form-group"><label for="password">Password</label><div class="password-input"><input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-requirements password-error" required/><button class="password-toggle" type="button" data-password-toggle="password" aria-label="Show password">Show</button></div><div id="password-requirements" class="password-panel" aria-live="polite"><div class="strength-line"><span>Password strength</span><strong id="password-strength">Not entered</strong></div><div class="strength-meter" aria-hidden="true"><span id="strength-bar"></span></div><ul><li data-rule="length">12 or more characters</li><li data-rule="upper">One uppercase letter</li><li data-rule="lower">One lowercase letter</li><li data-rule="number">One number</li><li data-rule="symbol">One symbol</li></ul></div><p class="field-error" id="password-error"></p></div>
+<div class="form-group"><label for="confirm-password">Confirm password</label><div class="password-input"><input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-match confirm-password-error" required/><button class="password-toggle" type="button" data-password-toggle="confirm-password" aria-label="Show confirmed password">Show</button></div><p id="password-match" class="match-status" aria-live="polite">Re-enter your password.</p><p class="field-error" id="confirm-password-error"></p></div></div>
+<div class="terms-field"><label class="checkbox-label"><input id="terms" type="checkbox" name="terms" aria-describedby="terms-error" required/><span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms and Conditions and Privacy Notice</a>.</span></label><p class="field-error" id="terms-error"></p></div><button class="submit-button" type="submit">Create patient account</button><p id="form-status" class="form-status" role="status" aria-live="polite" hidden></p></form><p class="auth-alternative">Already registered? <a href="/patient-login.html">Sign in</a></p></section></main><script src="auth.js"></script></body></html>

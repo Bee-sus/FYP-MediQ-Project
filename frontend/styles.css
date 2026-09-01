@@ -30,6 +30,8 @@ body {
 
 .brand { color: var(--ink); font-size: 25px; font-weight: 700; text-decoration: none; }
 .brand span { color: var(--blue); }
+.brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.placeholder-name { padding: 3px 7px; border: 1px dashed #98a2b3; border-radius: 5px; color: var(--muted); }
 .header-actions { display: flex; align-items: center; gap: 12px; }
 .role-switch { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .role-button { padding: 7px 12px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -88,6 +90,7 @@ h1 { margin: 0; max-width: 650px; font-size: clamp(42px, 5.5vw, 70px); line-heig
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 h2 { margin: 0; font-size: 32px; letter-spacing: -0.025em; }
 footer { padding: 28px 20px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
+footer a { color: var(--blue-dark); }
 .demo-notice { position: fixed; right: 22px; bottom: 22px; z-index: 10; max-width: 360px; padding: 14px 18px; border-radius: 12px; color: white; background: var(--ink); box-shadow: 0 16px 35px rgba(20, 33, 61, 0.24); font-size: 13px; line-height: 1.5; }
 .demo-notice[hidden] { display: none; }
 .role-button:focus-visible, .action-button:focus-visible, .feature-link:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 3px; }

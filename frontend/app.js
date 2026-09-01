@@ -71,14 +71,16 @@ function configureHomepageControls() {
       });
 
       const role = button.dataset.role;
-      const isAdmin = role === 'admin';
+      const access = {
+        patient: { label: 'Patient sign in', href: '/patient-login.html', message: 'New patients can create their own patient account.' },
+        staff: { label: 'Staff sign in', href: '/staff-login.html', message: 'Staff accounts are issued by the clinic administrator. There is no public staff registration.' },
+        admin: { label: 'Administrator sign in', href: '/admin-login.html', message: 'Administrator access is restricted. There is no public administrator registration.' },
+      }[role];
 
-      signInButton.textContent = isAdmin ? 'Staff sign in' : 'Sign in';
-      signInButton.href = isAdmin ? '/staff-login.html' : '/patient-login.html';
-      registerButton.hidden = isAdmin;
-      audienceMessage.textContent = isAdmin
-        ? 'Staff accounts are issued by the clinic administrator.'
-        : 'New patients can register for an account.';
+      signInButton.textContent = access.label;
+      signInButton.href = access.href;
+      registerButton.hidden = role !== 'patient';
+      audienceMessage.textContent = access.message;
     });
   });
 

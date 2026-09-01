@@ -7,8 +7,10 @@ This repository contains the initial development milestone for MediQ, a web-base
 - Working Node.js and Express application scaffold
 - Responsive development-preview interface
 - Homepage feature set based on the approved FYP prototype
-- Patient/Admin access selection and Sign In/Register previews
-- Separate patient sign-in, patient-registration and staff sign-in pages
+- Clearly separated Patient, Staff and Administrator access with three sign-in pages
+- Public patient registration only; Staff and Administrator accounts are clinic-issued
+- Accessible live registration validation and strong-password guidance
+- Draft Terms and Conditions and Privacy Notice for supervisor review
 - Smart queue, appointment and notification feature cards
 - Three-step patient journey section
 - Clinic services loaded dynamically from the Express API
@@ -61,8 +63,11 @@ API documentation will be available at `http://127.0.0.1:8000/docs`.
 3. Visit `http://localhost:3000/api/project-status` to show the first backend endpoint.
 4. Open `database/schema.sql` and explain the first four entities.
 5. Demonstrate that the clinic-service cards are loaded through `/api/services`.
-6. Explain that authentication, appointment submission and notifications are currently honest UI previews rather than completed backend workflows.
-7. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
+6. Demonstrate invalid and valid registration values, the live password checklist, password visibility and confirmation matching.
+7. Switch among Patient, Staff and Administrator on the homepage and show the separate restricted sign-in pages.
+8. Open the Terms and Privacy page and point out the items that the clinic must confirm before deployment.
+9. Explain that authentication, account persistence, appointment submission and notifications are currently honest UI previews rather than completed backend workflows.
+10. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
 
 ## Next milestone
 

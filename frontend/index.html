@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="MediQ web-based clinic queue management system" />
-    <title>MediQ | Smarter Clinic Queues</title>
+    <meta name="description" content="Patient appointments and live queue information for the clinic" />
+    <title>MediQ | Clinic name pending</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -12,11 +12,12 @@
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#">Medi<span>Q</span></a>
+      <a class="brand" href="/" aria-label="MediQ homepage">Medi<span>Q</span><small>Clinic name pending</small></a>
       <div class="header-actions" aria-label="Select how you want to access MediQ">
         <div class="role-switch">
           <button class="role-button active" type="button" data-role="patient" aria-pressed="true">Patient</button>
-          <button class="role-button" type="button" data-role="admin" aria-pressed="false">Admin</button>
+          <button class="role-button" type="button" data-role="staff" aria-pressed="false">Staff</button>
+          <button class="role-button" type="button" data-role="admin" aria-pressed="false">Administrator</button>
         </div>
       </div>
     </header>
@@ -24,26 +25,25 @@
     <main>
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Clinic queue management</p>
-          <h1>Less uncertainty.<br />A better waiting experience.</h1>
+          <p class="eyebrow">MediQ for <span class="placeholder-name">Clinic name pending</span></p>
+          <h1>Plan your visit.<br />Spend less time waiting.</h1>
           <p class="hero-description">
-            MediQ is a web-based system designed to let patients join queues remotely,
-            monitor their progress and receive an estimated waiting time.
+            Request an appointment, join the clinic queue remotely and follow your estimated wait from one simple patient portal.
           </p>
           <div class="actions">
-            <a id="sign-in-button" class="action-button primary-action" href="/patient-login.html">Sign in</a>
-            <a id="register-button" class="action-button secondary-action" href="/register.html">Register</a>
+            <a id="sign-in-button" class="action-button primary-action" href="/patient-login.html">Patient sign in</a>
+            <a id="register-button" class="action-button secondary-action" href="/register.html">Create patient account</a>
           </div>
-          <p id="audience-message" class="audience-message">New patients can register for an account.</p>
+          <p id="audience-message" class="audience-message">Patients may register themselves. Staff and administrator accounts are issued privately.</p>
         </div>
 
         <aside id="queue-preview" class="queue-preview" aria-label="Sample queue status">
           <div class="preview-header">
             <div>
               <p>General consultation</p>
-              <span>Current queue status</span>
+              <span>Illustrative patient view</span>
             </div>
-            <span class="live-indicator">Live</span>
+            <span class="live-indicator">Prototype</span>
           </div>
           <div class="queue-number">
             <span>Your number</span>
@@ -91,7 +91,7 @@
           <h2 id="workflow-heading">Three simple steps</h2>
         </div>
         <ol class="workflow-list">
-          <li><span>1</span><div><strong>Register or log in</strong><p>Create an account and choose patient or staff access.</p></div></li>
+          <li><span>1</span><div><strong>Create a patient account</strong><p>Register securely, or use the separate access provided for your role.</p></div></li>
           <li><span>2</span><div><strong>Join or book</strong><p>Select a service, enter the queue or request an appointment.</p></div></li>
           <li><span>3</span><div><strong>Get notified</strong><p>Track progress and receive an update when your turn is near.</p></div></li>
         </ol>
@@ -111,7 +111,7 @@
 
     </main>
 
-    <footer>© 2026 MediQ · Smarter clinic queue management</footer>
+    <footer>© 2026 MediQ for <strong>Clinic name pending</strong> · <a href="/terms.html">Terms &amp; Privacy</a></footer>
     <div id="demo-notice" class="demo-notice" role="status" aria-live="polite" hidden></div>
     <script src="app.js"></script>
   </body>

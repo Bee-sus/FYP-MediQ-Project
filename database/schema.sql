@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS clinic_services (
   description TEXT,
   average_duration_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 15,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_queue_open BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uq_service_name UNIQUE (name)
 );
@@ -47,7 +48,10 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   status ENUM('waiting', 'called', 'in_progress', 'completed', 'skipped', 'cancelled') NOT NULL DEFAULT 'waiting',
   joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   called_at TIMESTAMP NULL,
+  consultation_started_at TIMESTAMP NULL,
   completed_at TIMESTAMP NULL,
+  cancelled_at TIMESTAMP NULL,
+  cancellation_reason VARCHAR(300) NULL,
   CONSTRAINT fk_queue_patient FOREIGN KEY (patient_id) REFERENCES users(id),
   CONSTRAINT fk_queue_service FOREIGN KEY (service_id) REFERENCES clinic_services(id),
   CONSTRAINT uq_service_daily_queue UNIQUE (service_id, queue_date, queue_number),
@@ -63,8 +67,58 @@ CREATE TABLE IF NOT EXISTS waiting_time_predictions (
   CONSTRAINT fk_prediction_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id)
 );
 
+CREATE TABLE IF NOT EXISTS appointments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  patient_id BIGINT UNSIGNED NOT NULL,
+  service_id BIGINT UNSIGNED NOT NULL,
+  appointment_date DATE NOT NULL,
+  appointment_time TIME NOT NULL,
+  notes VARCHAR(500) NULL,
+  status ENUM('pending', 'approved', 'rejected', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+  rejection_reason VARCHAR(300) NULL,
+  cancelled_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_appointment_patient FOREIGN KEY (patient_id) REFERENCES users(id),
+  CONSTRAINT fk_appointment_service FOREIGN KEY (service_id) REFERENCES clinic_services(id),
+  INDEX idx_patient_appointments (patient_id, appointment_date, status),
+  INDEX idx_clinic_appointments (appointment_date, appointment_time, status)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  patient_id BIGINT UNSIGNED NOT NULL,
+  queue_entry_id BIGINT UNSIGNED NULL,
+  appointment_id BIGINT UNSIGNED NULL,
+  title VARCHAR(120) NOT NULL,
+  message VARCHAR(500) NOT NULL,
+  notification_type ENUM('queue', 'appointment', 'account', 'system') NOT NULL,
+  read_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notification_patient FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notification_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id) ON DELETE SET NULL,
+  CONSTRAINT fk_notification_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL,
+  INDEX idx_patient_notifications (patient_id, read_at, created_at)
+);
+
+CREATE TABLE IF NOT EXISTS staff_audit_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  staff_id BIGINT UNSIGNED NOT NULL,
+  action VARCHAR(80) NOT NULL,
+  entity_type ENUM('queue_entry', 'clinic_service', 'appointment') NOT NULL,
+  entity_id BIGINT UNSIGNED NOT NULL,
+  details VARCHAR(500) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_audit_staff FOREIGN KEY (staff_id) REFERENCES users(id),
+  INDEX idx_staff_audit (staff_id, created_at),
+  INDEX idx_entity_audit (entity_type, entity_id)
+);
+
 INSERT INTO clinic_services (name, description, average_duration_minutes)
 VALUES
   ('General Consultation', 'Standard consultation with a clinic doctor.', 15),
-  ('Follow-up Consultation', 'Follow-up visit for an existing condition.', 10)
+  ('Follow-up Consultation', 'Follow-up visit for an existing condition.', 10),
+  ('Dental Consultation', 'Assessment and consultation for common dental concerns.', 20),
+  ('Specialist Consultation', 'Consultation requested with an available clinic specialist.', 25),
+  ('Pharmacy Collection', 'Collection of medication prepared by the clinic pharmacy.', 5)
 ON DUPLICATE KEY UPDATE description = VALUES(description), average_duration_minutes = VALUES(average_duration_minutes);

@@ -12,7 +12,7 @@ describe('system endpoints', () => {
     const response = await request(app).get('/api/project-status');
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.milestone).toBe('Database authentication foundation');
+    expect(response.body.milestone).toBe('Patient portal');
     expect(response.body.completed.length).toBeGreaterThan(0);
   });
 
@@ -21,7 +21,7 @@ describe('system endpoints', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body.source).toBe('development-data');
-    expect(response.body.services).toHaveLength(2);
+    expect(response.body.services).toHaveLength(5);
     expect(response.body.services[0]).toMatchObject({
       name: 'General Consultation',
       averageDurationMinutes: 15,
@@ -130,7 +130,7 @@ describe('system endpoints', () => {
     const response = await request(app).post('/api/auth/login').send({ email: 'staff@example.com', password: 'Strong-Staff-2026!', role: 'staff' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.redirect).toBe('/dashboard.html?role=staff');
+    expect(response.body.redirect).toBe('/staff-dashboard.html');
     expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
     expect(response.headers['set-cookie'][0]).toContain('SameSite=Strict');
     expect(execute).toHaveBeenCalledTimes(2);
@@ -146,9 +146,319 @@ describe('system endpoints', () => {
     expect(response.text).toContain('patient-dashboard.js');
   });
 
+  test('serves the dedicated Staff operations dashboard', async () => {
+    const response = await request(app).get('/staff-dashboard.html');
+    expect(response.statusCode).toBe(200);
+    expect(response.text).toContain('Clinic operations');
+    expect(response.text).toContain('Service queues');
+    expect(response.text).toContain('staff-dashboard.js');
+  });
+
+  test('protects Staff operations from unauthenticated requests', async () => {
+    const response = await request(app).get('/api/staff/queues');
+    expect(response.statusCode).toBe(401);
+  });
+
+  test('returns the Staff overview metrics', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' }]])
+      .mockResolvedValueOnce([[{ total: 7, waiting: 3, called: 1, inProgress: 1, completed: 2, skipped: 0 }]])
+      .mockResolvedValueOnce([[{ pendingAppointments: 4 }]])
+      .mockResolvedValueOnce([[{ averageDuration: 14 }]]);
+
+    const response = await request(app).get('/api/staff/overview').set('Cookie', 'mediq_session=staff-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.summary).toMatchObject({ waiting: 3, called: 1, inProgress: 1, completed: 2, pendingAppointments: 4, averageDuration: 14 });
+    execute.mockRestore();
+  });
+
+  test('rejects an invalid Staff queue status transition', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
+    ]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn().mockResolvedValueOnce([[
+        { id: 81, patientId: 21, status: 'waiting', queueNumber: 3, serviceName: 'General Consultation' },
+      ]]),
+      commit: jest.fn(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+
+    const response = await request(app)
+      .patch('/api/staff/queues/81/status')
+      .set('Cookie', 'mediq_session=staff-token')
+      .send({ status: 'completed' });
+
+    expect(response.statusCode).toBe(409);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('updates a queue through a valid Staff transition with notification and audit', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
+    ]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[
+          { id: 81, patientId: 21, serviceId: 2, status: 'waiting', queueNumber: 3, serviceName: 'General Consultation' },
+        ]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 103 }])
+        .mockResolvedValueOnce([{ insertId: 104 }]),
+      commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+
+    const response = await request(app)
+      .patch('/api/staff/queues/81/status')
+      .set('Cookie', 'mediq_session=staff-token')
+      .send({ status: 'called' });
+
+    expect(response.statusCode).toBe(200);
+    expect(connection.execute.mock.calls[2][0]).toContain('called_at = CURRENT_TIMESTAMP');
+    expect(connection.execute.mock.calls[3][0]).toContain('notifications');
+    expect(connection.execute.mock.calls[4][0]).toContain('staff_audit_logs');
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
   test('protects patient dashboard data from unauthenticated requests', async () => {
     const response = await request(app).get('/api/patient/overview');
     expect(response.statusCode).toBe(401);
     expect(response.body.error).toContain('Sign in');
+  });
+
+  test.each([
+    ['/join-queue.html', 'Join today’s queue'],
+    ['/queue-status.html', 'Your queue status'],
+    ['/patient-services.html', 'data-patient-page="services"'],
+    ['/queue-history.html', 'data-patient-page="history"'],
+    ['/appointments.html', 'data-patient-page="appointments"'],
+    ['/notifications.html', 'data-patient-page="notifications"'],
+    ['/patient-profile.html', 'data-patient-page="profile"'],
+  ])('serves the patient queue page %s', async (path, heading) => {
+    const response = await request(app).get(path);
+    expect(response.statusCode).toBe(200);
+    expect(response.text).toContain(heading);
+  });
+
+  test('rejects an invalid service before starting a queue transaction', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{
+      id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient',
+    }]]);
+    const getConnection = jest.spyOn(pool, 'getConnection');
+    const response = await request(app)
+      .post('/api/patient/queues')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ serviceId: 'invalid' });
+
+    expect(response.statusCode).toBe(422);
+    expect(getConnection).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('joins a queue transactionally and stores the baseline estimate', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{
+      id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient',
+    }]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 21 }]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ id: 2, name: 'General Consultation', averageDurationMinutes: 15 }]])
+        .mockResolvedValueOnce([[{ nextNumber: 3 }]])
+        .mockResolvedValueOnce([[{ peopleAhead: 2 }]])
+        .mockResolvedValueOnce([{ insertId: 81 }])
+        .mockResolvedValueOnce([{ insertId: 91 }])
+        .mockResolvedValueOnce([{ insertId: 101 }]),
+      commit: jest.fn().mockResolvedValue(),
+      rollback: jest.fn().mockResolvedValue(),
+      release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+    const response = await request(app)
+      .post('/api/patient/queues')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ serviceId: 2 });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.body.queue).toMatchObject({ queueNumber: 3, peopleAhead: 2, estimatedMinutes: 30 });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.execute.mock.calls[6][0]).toContain('waiting_time_predictions');
+    expect(connection.execute.mock.calls[6][1]).toEqual([81, 30]);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('prevents a patient from joining a second active queue', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{
+      id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient',
+    }]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn().mockResolvedValueOnce([[{ id: 21 }]]).mockResolvedValueOnce([[{ id: 77 }]]),
+      commit: jest.fn(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+    const response = await request(app)
+      .post('/api/patient/queues')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ serviceId: 1 });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.body.queueId).toBe(77);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('requires a meaningful reason before queue cancellation', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{
+      id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient',
+    }]]);
+    const getConnection = jest.spyOn(pool, 'getConnection');
+    const response = await request(app)
+      .post('/api/patient/queues/81/cancel')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ reason: 'x' });
+
+    expect(response.statusCode).toBe(422);
+    expect(getConnection).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('cancels only a queue owned by the authenticated patient', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{
+      id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient',
+    }]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 81, status: 'waiting' }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 102 }]),
+      commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+    const response = await request(app)
+      .post('/api/patient/queues/81/cancel')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ reason: 'Unable to attend today' });
+
+    expect(response.statusCode).toBe(200);
+    expect(connection.execute.mock.calls[0][0]).toContain('patient_id = ?');
+    expect(connection.execute.mock.calls[0][1]).toEqual([81, 21]);
+    expect(connection.execute.mock.calls[1][1]).toEqual(['Unable to attend today', 81, 21]);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('returns paginated queue history belonging to the signed-in patient', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient' }]])
+      .mockResolvedValueOnce([[{ total: 1 }]])
+      .mockResolvedValueOnce([[{ id: 81, queueNumber: 3, status: 'completed', serviceName: 'General Consultation' }]]);
+
+    const response = await request(app)
+      .get('/api/patient/history?status=completed')
+      .set('Cookie', 'mediq_session=test-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.total).toBe(1);
+    expect(execute.mock.calls[1][1]).toEqual([21, 'completed']);
+    expect(execute.mock.calls[2][1]).toEqual([21, 'completed']);
+    execute.mockRestore();
+  });
+
+  test('submits an appointment request transactionally', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient' },
+    ]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 2, name: 'General Consultation' }]])
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([{ insertId: 44 }])
+        .mockResolvedValueOnce([{ insertId: 45 }]),
+      commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+    const response = await request(app)
+      .post('/api/patient/appointments')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ serviceId: 2, appointmentDate: '2099-10-10', appointmentTime: '10:30', notes: 'Routine follow-up' });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.body.appointmentId).toBe(44);
+    expect(connection.execute.mock.calls[2][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('rejects appointment times outside the published clinic slots', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient' },
+    ]]);
+    const getConnection = jest.spyOn(pool, 'getConnection');
+
+    const response = await request(app)
+      .post('/api/patient/appointments')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ serviceId: 2, appointmentDate: '2099-10-10', appointmentTime: '13:17' });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.body.error).toContain('available clinic time slots');
+    expect(getConnection).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('marks only the signed-in patient notification as read', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    const response = await request(app)
+      .patch('/api/patient/notifications/17/read')
+      .set('Cookie', 'mediq_session=test-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(execute.mock.calls[1][1]).toEqual([17, 21]);
+    execute.mockRestore();
+  });
+
+  test('validates patient-editable profile fields and does not accept a role change', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 21, fullName: 'Test Patient', email: 'patient@example.com', role: 'patient' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    const response = await request(app)
+      .patch('/api/patient/profile')
+      .set('Cookie', 'mediq_session=test-token')
+      .send({ fullName: 'Updated Patient', phone: '+60 12-345 6789', gender: 'other', role: 'admin' });
+
+    expect(response.statusCode).toBe(200);
+    expect(execute.mock.calls[1][0]).not.toContain('role = ?');
+    expect(execute.mock.calls[1][1]).toEqual(['Updated Patient', '+60 12-345 6789', 'other', 21]);
+    execute.mockRestore();
   });
 });

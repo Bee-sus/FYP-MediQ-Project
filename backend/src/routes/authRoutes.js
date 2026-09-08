@@ -64,7 +64,9 @@ router.post('/login', async (request, response) => {
     const token = crypto.randomBytes(32).toString('base64url');
     const maxAge = setSessionCookie(response, token, Boolean(request.body.remember));
     await pool.execute('INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))', [user.id, tokenHash(token), maxAge]);
-    const redirect = user.role === 'patient' ? '/patient-dashboard.html' : `/dashboard.html?role=${user.role}`;
+    const redirect = user.role === 'patient'
+      ? '/patient-dashboard.html'
+      : user.role === 'staff' ? '/staff-dashboard.html' : '/dashboard.html?role=admin';
     return response.json({ message: 'Signed in successfully.', user: { id: user.id, fullName: user.full_name, email: user.email, role: user.role }, redirect });
   } catch (error) {
     return response.status(503).json({ error: 'Sign-in is unavailable. Check the database connection and try again.' });

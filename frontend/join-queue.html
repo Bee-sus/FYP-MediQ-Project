@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Join Queue | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body class="portal-body">
+    <header class="portal-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="portal-account">
+        <span id="patient-name">Patient</span>
+        <button id="logout-button" class="action-button secondary-action" type="button">Sign out</button>
+      </div>
+    </header>
+    <div class="portal-layout">
+      <nav class="portal-nav" aria-label="Patient portal">
+        <a href="/patient-dashboard.html"><span aria-hidden="true">⌂</span> Overview</a>
+        <a href="/patient-services.html"><span aria-hidden="true">✚</span> Clinic services</a>
+        <a class="active" href="/join-queue.html" aria-current="page">
+          <span aria-hidden="true">＋</span> Join queue
+        </a>
+        <a href="/queue-status.html"><span aria-hidden="true">Q</span> Queue status</a>
+        <a href="/appointments.html"><span aria-hidden="true">□</span> Appointments</a>
+        <a href="/notifications.html"><span aria-hidden="true">○</span> Notifications</a>
+        <a href="/queue-history.html"><span aria-hidden="true">↻</span> Queue history</a>
+        <a href="/patient-profile.html"><span aria-hidden="true">◎</span> Profile</a>
+      </nav>
+      <main class="patient-main narrow-patient-main">
+        <section class="patient-heading queue-page-heading">
+          <div>
+            <span class="page-icon" aria-hidden="true">Q</span>
+            <p class="eyebrow">Patient queue</p>
+            <h1>Join today’s queue</h1>
+            <p>Choose the consultation you need and reserve your place before arriving at the clinic.</p>
+          </div>
+          <p id="current-date" class="date-chip"></p>
+        </section>
+        <ol class="queue-stepper" aria-label="Queue registration progress">
+          <li class="active"><span>1</span><div><strong>Select service</strong><small>Choose your consultation</small></div></li>
+          <li><span>2</span><div><strong>Confirm details</strong><small>Review your selection</small></div></li>
+          <li><span>3</span><div><strong>Receive number</strong><small>Track your place</small></div></li>
+        </ol>
+        <p id="page-alert" class="dashboard-alert" role="alert" aria-live="assertive" hidden></p>
+        <div class="join-queue-layout">
+          <section class="queue-workspace-card" aria-labelledby="service-choice-heading">
+            <div class="dashboard-section-heading">
+              <div><p class="eyebrow">Available today</p><h2 id="service-choice-heading">Choose a service</h2></div>
+              <span class="availability-label"><i aria-hidden="true"></i> Open</span>
+            </div>
+            <p class="section-introduction">Select the service that best matches the purpose of your visit.</p>
+            <div id="queue-services" class="queue-service-options" role="radiogroup" aria-labelledby="service-choice-heading">
+              <p class="dashboard-loading">Loading available services…</p>
+            </div>
+          </section>
+          <section class="confirmation-panel" aria-labelledby="confirmation-heading">
+            <div class="confirmation-panel-header">
+              <p class="eyebrow">Your selection</p>
+              <h2 id="confirmation-heading">Queue summary</h2>
+              <p>Check these details before reserving your place.</p>
+            </div>
+            <dl>
+              <div><dt>Patient</dt><dd id="confirm-patient">—</dd></div>
+              <div><dt>Service</dt><dd id="confirm-service">Select a service</dd></div>
+              <div><dt>Date</dt><dd id="confirm-date">—</dd></div>
+              <div><dt>Estimated duration</dt><dd id="confirm-duration">—</dd></div>
+            </dl>
+            <p class="queue-disclaimer">
+              Waiting times are estimates. Emergencies and clinical priorities may change the queue order.
+            </p>
+            <label class="queue-agreement">
+              <input id="queue-agreement" type="checkbox" />
+              <span>I confirm that I want to join this clinic queue today.</span>
+            </label>
+            <button id="join-queue-button" class="submit-button" type="button" disabled>Join queue</button>
+            <p id="join-status" class="form-status" role="status" aria-live="polite" hidden></p>
+          </section>
+        </div>
+      </main>
+    </div>
+    <script src="join-queue.js"></script>
+  </body>
+</html>

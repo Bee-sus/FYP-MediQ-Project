@@ -19,6 +19,27 @@ const clinicServices = [
     averageDurationMinutes: 10,
     availability: 'Available',
   },
+  {
+    id: 3,
+    name: 'Dental Consultation',
+    description: 'Assessment and consultation for common dental concerns.',
+    averageDurationMinutes: 20,
+    availability: 'Available',
+  },
+  {
+    id: 4,
+    name: 'Specialist Consultation',
+    description: 'Consultation requested with an available clinic specialist.',
+    averageDurationMinutes: 25,
+    availability: 'Available',
+  },
+  {
+    id: 5,
+    name: 'Pharmacy Collection',
+    description: 'Collection of medication prepared by the clinic pharmacy.',
+    averageDurationMinutes: 5,
+    availability: 'Available',
+  },
 ];
 
 router.get('/', (request, response) => {

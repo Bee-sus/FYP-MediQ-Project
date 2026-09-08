@@ -23,7 +23,7 @@ router.get('/health', async (request, response) => {
 
 router.get('/project-status', (request, response) => {
   response.json({
-    milestone: 'Database authentication foundation',
+    milestone: 'Patient portal',
     completed: [
       'Node.js and Express server scaffold',
       'Initial responsive user interface',
@@ -32,10 +32,17 @@ router.get('/project-status', (request, response) => {
       'Patient registration with server-side validation',
       'Password hashing and secure sessions',
       'Patient, Staff and Administrator role access',
+      'Patient dashboard with MySQL data',
+      'Transactional patient queue registration',
+      'Patient queue status and cancellation',
+      'Patient appointment requests and cancellation',
+      'Patient notification centre',
+      'Patient queue history, profile and password management',
+      'Staff operations overview and live queue management',
+      'Validated queue transitions with patient notifications and audit records',
       'Machine-learning service boundary defined',
     ],
     planned: [
-      'Patient queue registration workflow',
       'Staff queue management dashboard',
       'Waiting-time model training and evaluation',
     ],

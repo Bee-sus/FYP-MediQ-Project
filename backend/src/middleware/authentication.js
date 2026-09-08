@@ -23,6 +23,7 @@ async function authenticate(request, response, next) {
     );
     if (!rows.length) return response.status(401).json({ error: 'Your session has expired. Please sign in again.' });
     request.user = rows[0];
+    request.sessionTokenHash = tokenHash(token);
     return next();
   } catch (error) {
     return response.status(503).json({ error: 'Account services are temporarily unavailable.' });

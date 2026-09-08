@@ -1,6 +1,6 @@
 # MediQ development starter
 
-This repository contains the initial development milestone for MediQ, a web-based clinic queue management system. It intentionally establishes only the system foundation; authentication, queue operations, appointments and trained machine-learning predictions are planned for later milestones.
+This repository contains the working Patient portal and first Staff operations milestone for MediQ, a web-based clinic queue management system. Patient workflows and live Staff queue control are implemented; Staff appointment management, administration and trained machine-learning predictions remain later milestones.
 
 ## Current milestone
 
@@ -12,15 +12,23 @@ This repository contains the initial development milestone for MediQ, a web-base
 - Accessible live registration validation and strong-password guidance
 - MySQL-backed patient registration, password hashing and secure role-aware sessions
 - Protected Patient, Staff and Administrator dashboard entry
+- MySQL-backed Patient dashboard, clinic-service selection and queue history
+- Transactional daily queue-number generation with duplicate-active-queue prevention
+- Patient queue status, transparent baseline waiting estimate and cancellation reason
+- Staff operations overview and live service queue management
+- Enforced queue ordering, validated status transitions, Patient notifications and Staff audit records
+- Patient appointment requests, status tracking and cancellation
+- Patient notification inbox with read/unread state
+- Filterable queue history, profile editing and secure password changes
 - Draft Terms and Conditions and Privacy Notice for supervisor review
-- Smart queue, appointment and notification feature cards
+- Dedicated, responsive pages for all Patient portal features
 - Three-step patient journey section
 - Clinic services loaded dynamically from the Express API
 - Health and project-status API endpoints
 - Configurable MySQL connection
-- Initial database schema for users, services, queues and predictions
+- MySQL schema for users, services, queues, appointments, notifications and predictions
 - Small FastAPI prediction-service stub with a clearly labelled baseline calculation
-- First automated API test
+- Automated tests for public pages, authentication, ownership and Patient workflows
 
 ## Project structure
 
@@ -66,14 +74,21 @@ API documentation will be available at `http://127.0.0.1:8000/docs`.
 1. Show the folder structure and explain the client-server separation.
 2. Start the Node.js server and demonstrate the completed homepage sections.
 3. Visit `http://localhost:3000/api/project-status` to show the first backend endpoint.
-4. Open `database/schema.sql` and explain the first four entities.
+4. Open `database/schema.sql` and explain the user, queue, appointment and notification relationships.
 5. Demonstrate that the clinic-service cards are loaded through `/api/services`.
 6. Demonstrate invalid and valid registration values, the live password checklist, password visibility and confirmation matching.
 7. Switch among Patient, Staff and Administrator on the homepage and show the separate restricted sign-in pages.
 8. Open the Terms and Privacy page and point out the items that the clinic must confirm before deployment.
-9. Register a patient, sign in, show the role-aware dashboard and sign out. Explain that appointment submission, queue operations and notifications are the next backend workflows.
-10. Explain that the FastAPI endpoint currently uses a transparent baseline and will later be replaced by a trained and evaluated regression model.
+9. Register a patient, sign in, select a service and join the queue. Show the queue number, position and baseline estimate.
+10. Cancel the queue with a reason and show that it remains in the filterable queue history.
+11. Request an appointment and show its pending clinic-approval status, then open the notification inbox.
+12. Update the Patient profile and demonstrate the password requirements, matching feedback and show/hide controls.
+13. Sign in as Staff and show today’s operational totals and service queues.
+14. Close and reopen a service queue, then call the earliest waiting patient and move them into consultation.
+15. Show the resulting Patient notification and explain that invalid transitions are rejected and Staff actions are audited.
+16. Explain that appointment management is the next Staff stage.
+17. Explain that the current waiting time is a transparent baseline and will later be replaced by a trained and evaluated regression model.
 
 ## Next milestone
 
-The next development milestone should implement registration/login with patient and staff roles, followed by the transactional queue-joining workflow.
+The next development milestone should add Staff appointment approval, rejection and rescheduling with booking-conflict protection.

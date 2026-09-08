@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Queue Status | MediQ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body class="portal-body">
+    <header class="portal-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="portal-account">
+        <span id="patient-name">Patient</span>
+        <button id="logout-button" class="action-button secondary-action" type="button">Sign out</button>
+      </div>
+    </header>
+    <div class="portal-layout">
+      <nav class="portal-nav" aria-label="Patient portal">
+        <a href="/patient-dashboard.html"><span aria-hidden="true">⌂</span> Overview</a>
+        <a href="/patient-services.html"><span aria-hidden="true">✚</span> Clinic services</a>
+        <a href="/join-queue.html"><span aria-hidden="true">＋</span> Join queue</a>
+        <a class="active" href="/queue-status.html" aria-current="page">
+          <span aria-hidden="true">Q</span> Queue status
+        </a>
+        <a href="/appointments.html"><span aria-hidden="true">□</span> Appointments</a>
+        <a href="/notifications.html"><span aria-hidden="true">○</span> Notifications</a>
+        <a href="/queue-history.html"><span aria-hidden="true">↻</span> Queue history</a>
+        <a href="/patient-profile.html"><span aria-hidden="true">◎</span> Profile</a>
+      </nav>
+      <main class="patient-main narrow-patient-main">
+        <section class="patient-heading queue-page-heading">
+          <div>
+            <span class="page-icon" aria-hidden="true">Q</span>
+            <p class="eyebrow">Live queue</p>
+            <h1>Your queue status</h1>
+            <p>Follow your place and prepare to arrive when your turn approaches.</p>
+          </div>
+          <button id="refresh-queue" class="refresh-button" type="button"><span aria-hidden="true">↻</span> Refresh status</button>
+        </section>
+        <p id="status-alert" class="dashboard-alert" role="status" aria-live="polite" hidden></p>
+        <section id="queue-status-content" aria-live="polite"><p class="dashboard-loading">Loading your queue…</p></section>
+      </main>
+    </div>
+
+    <dialog id="cancel-dialog" class="cancel-dialog" aria-labelledby="cancel-heading">
+      <form id="cancel-form" method="dialog">
+        <p class="eyebrow">Cancel queue</p>
+        <h2 id="cancel-heading">Why are you leaving the queue?</h2>
+        <p>Your queue entry will remain in your history as cancelled.</p>
+        <label for="cancellation-reason">Cancellation reason</label>
+        <textarea id="cancellation-reason" minlength="3" maxlength="300" rows="4" required></textarea>
+        <p id="cancel-error" class="field-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="keep-queue" class="action-button secondary-action" type="button">Keep my place</button>
+          <button class="danger-button" type="submit">Cancel queue</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="queue-status.js"></script>
+  </body>
+</html>

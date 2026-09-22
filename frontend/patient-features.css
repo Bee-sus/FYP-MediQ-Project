@@ -332,6 +332,7 @@
 .feature-form-card textarea {
   width: 100%;
   min-height: 44px;
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid #d9e0ea;
   border-radius: 9px;
@@ -357,6 +358,17 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  align-items: start;
+}
+
+.feature-form-row > label {
+  align-content: start;
+  align-self: start;
+}
+
+.feature-form-row input,
+.feature-form-row select {
+  height: 50px;
 }
 
 .feature-submit {
@@ -444,16 +456,20 @@
 }
 
 .cancel-appointment {
-  padding: 7px 9px;
+  min-height: 40px;
+  padding: 9px 12px;
   border: 1px solid #f0c5c1;
   border-radius: 7px;
   color: #b42318;
   background: #fff;
   font: inherit;
-  font-size: 9px;
+  font-size: .78rem;
   font-weight: 700;
   cursor: pointer;
 }
+
+.cancel-appointment:hover { background: #fff4f2; }
+.cancel-appointment:focus-visible { outline: 3px solid rgba(180, 35, 24, .2); outline-offset: 2px; }
 
 .notification-card {
   width: 100%;
@@ -594,3 +610,9 @@
     justify-self: start;
   }
 }
+
+.proposal-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; }
+.proposal-actions p { flex-basis: 100%; }
+.proposal-actions .cancel-appointment:first-of-type { border-color: #b9d3ff; background: #edf3ff; color: var(--blue-dark); }
+.proposal-actions .cancel-appointment:first-of-type:hover { background: #dce8ff; }
+.record-status[data-status="reschedule_proposed"] { background: #fff1cf; color: #745300; }

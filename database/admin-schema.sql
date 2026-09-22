@@ -1,0 +1,27 @@
+CREATE TABLE IF NOT EXISTS clinic_schedule_state (
+  id TINYINT UNSIGNED PRIMARY KEY,
+  revision INT UNSIGNED NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+INSERT IGNORE INTO clinic_schedule_state (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS clinic_hours (
+  day_of_week TINYINT UNSIGNED PRIMARY KEY,
+  is_open BOOLEAN NOT NULL DEFAULT TRUE,
+  opens_at TIME NOT NULL DEFAULT '09:00:00',
+  closes_at TIME NOT NULL DEFAULT '17:00:00',
+  break_start TIME NULL DEFAULT '12:00:00',
+  break_end TIME NULL DEFAULT '14:00:00'
+) ENGINE=InnoDB;
+INSERT IGNORE INTO clinic_hours (day_of_week) VALUES (0),(1),(2),(3),(4),(5),(6);
+
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  admin_id BIGINT UNSIGNED NOT NULL,
+  action VARCHAR(80) NOT NULL,
+  entity_type VARCHAR(40) NOT NULL,
+  entity_id BIGINT UNSIGNED NOT NULL,
+  details VARCHAR(1000) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_admin_audit_user FOREIGN KEY (admin_id) REFERENCES users(id),
+  INDEX idx_admin_audit_time (created_at, id)
+) ENGINE=InnoDB;

@@ -2,6 +2,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
+const { migrateAppointments } = require('./appointmentMigration');
+const { migrateAdmin } = require('./adminMigration');
 const { hashPassword, meetsPasswordRules } = require('../backend/src/services/passwordService');
 
 async function seedControlledAccount(connection, role, name, email, password) {
@@ -40,6 +42,8 @@ async function setup() {
     await addColumnIfMissing(connection, 'queue_entries', 'cancellation_reason', 'VARCHAR(300) NULL AFTER cancelled_at');
     await addColumnIfMissing(connection, 'queue_entries', 'consultation_started_at', 'TIMESTAMP NULL AFTER called_at');
     await addColumnIfMissing(connection, 'clinic_services', 'is_queue_open', 'BOOLEAN NOT NULL DEFAULT TRUE AFTER is_active');
+    await migrateAppointments(connection);
+    await migrateAdmin(connection);
     await seedControlledAccount(connection, 'staff', process.env.SEED_STAFF_NAME || 'Clinic Staff', process.env.SEED_STAFF_EMAIL, process.env.SEED_STAFF_PASSWORD);
     await seedControlledAccount(connection, 'admin', process.env.SEED_ADMIN_NAME || 'System Administrator', process.env.SEED_ADMIN_EMAIL, process.env.SEED_ADMIN_PASSWORD);
     console.log('MediQ database schema is ready.');

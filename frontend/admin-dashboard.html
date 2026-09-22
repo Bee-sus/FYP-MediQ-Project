@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Administrator Dashboard | MediQ</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="staff-dashboard.css" />
+    <link rel="stylesheet" href="admin-dashboard.css" />
+  </head>
+  <body class="staff-body admin-body">
+    <header class="staff-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="staff-account"><div><strong id="admin-name">Administrator</strong><span>Administrator account</span></div><button id="logout-button" class="staff-secondary-button" type="button">Sign out</button></div>
+    </header>
+    <div class="staff-layout">
+      <nav class="staff-nav" aria-label="Administrator portal">
+        <a href="#overview">Overview</a>
+        <a href="#staff">Staff accounts</a>
+        <a href="#services">Clinic services</a>
+        <a href="#hours">Operating hours</a>
+        <a href="#activity">Activity log</a>
+      </nav>
+      <main class="staff-main">
+        <div class="staff-heading"><div><p class="staff-eyebrow">Administrator portal</p><h1>Clinic management</h1><p>Manage staff access, services and appointment availability.</p></div></div>
+        <p id="admin-alert" class="staff-alert" role="status" aria-live="polite" hidden></p>
+        <section data-panel="overview" aria-labelledby="overview-heading">
+          <div class="staff-section-heading"><h2 id="overview-heading">Clinic overview</h2><button type="button" class="staff-secondary-button" id="refresh-overview">Refresh</button></div>
+          <div id="admin-summary" class="staff-summary-grid"><p>Loading overview…</p></div>
+          <div class="admin-intro"><h2>Keep the clinic ready</h2><p>Create staff accounts, maintain the service list and review your weekly appointment hours. Patient registration and profile changes take effect without administrator approval.</p><a href="#hours" class="staff-primary-button">Review operating hours</a></div>
+        </section>
+        <section data-panel="staff" aria-labelledby="staff-heading" hidden>
+          <div class="staff-section-heading"><div><h2 id="staff-heading">Staff accounts</h2><p>Only administrators can issue staff access.</p></div><button type="button" class="staff-secondary-button" id="refresh-staff">Refresh</button></div>
+          <div class="admin-columns">
+            <form id="create-staff-form" class="admin-card">
+              <h3>Create staff account</h3>
+              <label>Full name<input name="fullName" autocomplete="name" minlength="2" maxlength="120" required /></label>
+              <label>Email address<input name="email" type="email" autocomplete="off" maxlength="190" required /></label>
+              <label>Password<input id="staff-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="staff-password-help" required /></label>
+              <button id="toggle-password" type="button" class="staff-secondary-button" aria-controls="staff-password" aria-pressed="false">Show password</button>
+              <p id="staff-password-help">Use 12–128 characters with uppercase, lowercase, a number and a symbol. Share the credentials with the staff member privately.</p>
+              <button type="submit" class="staff-primary-button">Create account</button>
+            </form>
+            <div id="staff-list" class="admin-list" aria-live="polite"></div>
+          </div>
+        </section>
+        <section data-panel="services" aria-labelledby="services-heading" hidden>
+          <div class="staff-section-heading"><div><h2 id="services-heading">Clinic services</h2><p>Service changes appear on the homepage and in patient booking options.</p></div><button id="new-service" type="button" class="staff-primary-button">Add service</button></div>
+          <p>Resolve active queues and upcoming appointments before deactivating a service. Reactivated queues can be reopened by Staff.</p>
+          <div id="admin-services" class="admin-list" aria-live="polite"></div>
+        </section>
+        <section data-panel="hours" aria-labelledby="hours-heading" hidden>
+          <div class="staff-section-heading"><div><h2 id="hours-heading">Operating hours</h2><p>Weekly appointment hours in Malaysia time. Each slot lasts 30 minutes.</p></div><button type="button" id="reload-hours" class="staff-secondary-button">Reload schedule</button></div>
+          <p id="schedule-note"></p>
+          <p>Leave both break times empty for uninterrupted hours. Existing appointments must fit the new schedule before it can be saved. One patient can reserve each time slot across the clinic.</p>
+          <form id="hours-form"><div id="hours-days" class="hours-days"></div><button id="save-hours" type="submit" class="staff-primary-button" disabled>Save weekly hours</button></form>
+        </section>
+        <section data-panel="activity" aria-labelledby="activity-heading" hidden>
+          <div class="staff-section-heading"><div><h2 id="activity-heading">Activity log</h2><p>Administrator changes and Staff queue and appointment actions.</p></div><button id="refresh-audit" class="staff-secondary-button" type="button">Refresh</button></div>
+          <div id="audit-list" class="admin-list" aria-live="polite"></div>
+          <div class="admin-pagination"><button id="audit-previous" class="staff-secondary-button" type="button">Previous</button><span id="audit-page"></span><button id="audit-next" class="staff-secondary-button" type="button">Next</button></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="service-dialog" class="staff-dialog" aria-labelledby="service-dialog-title">
+      <form id="service-form">
+        <h2 id="service-dialog-title">Clinic service</h2>
+        <label>Service name<input name="name" minlength="2" maxlength="120" required /></label>
+        <label>Description<textarea name="description" maxlength="1000" rows="3"></textarea></label>
+        <label>Average consultation duration (minutes)<input name="averageDurationMinutes" type="number" min="1" max="240" step="1" required /></label>
+        <label class="admin-checkbox"><input name="isActive" type="checkbox" /> Active service</label>
+        <p id="service-error" role="alert"></p>
+        <div><button id="close-service" type="button" class="staff-secondary-button">Go back</button><button type="submit" class="staff-primary-button">Save service</button></div>
+      </form>
+    </dialog>
+    <script src="admin-dashboard.js"></script>
+  </body>
+</html>

@@ -44,6 +44,7 @@ function renderShell() {
     </div>
   `;
   document.querySelector('#logout-button').addEventListener('click', logout);
+  document.querySelector('.portal-nav .active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
 function showAlert(message, type = 'success') {
@@ -132,7 +133,7 @@ async function loadHistoryPage(status = '', requestedPage = 1) {
   const content = document.querySelector('#page-content');
   content.innerHTML = `
     <div class="filter-bar" role="group" aria-label="Filter queue history">
-      ${['', 'completed', 'cancelled', 'skipped'].map((value) => `<button type="button" data-history-filter="${value}" class="${status === value ? 'active' : ''}">${value || 'All'}</button>`).join('')}
+      ${['', 'completed', 'cancelled', 'skipped'].map((value) => `<button type="button" data-history-filter="${value}" class="${status === value ? 'active' : ''}">${value === 'skipped' ? 'Skipped (legacy)' : value || 'All'}</button>`).join('')}
     </div>
     <div id="history-records" class="records-card"></div>
     <div class="pagination"><button id="previous-page" type="button">← Previous</button><span>Page ${data.page} of ${data.totalPages}</span><button id="next-page" type="button">Next →</button></div>
@@ -162,9 +163,9 @@ function appointmentCard(item) {
   card.querySelector('.appointment-date span').textContent = new Intl.DateTimeFormat('en-MY', { month: 'short', year: 'numeric' }).format(date);
   card.querySelector('h2').textContent = item.serviceName;
   const status = card.querySelector('.record-status');
-  status.textContent = item.status;
+  status.textContent = item.status === 'reschedule_proposed' ? 'Awaiting your response' : item.status;
   status.dataset.status = item.status;
-  card.querySelector('.appointment-time').textContent = `Requested time: ${item.appointmentTime}`;
+  card.querySelector('.appointment-time').textContent = `Appointment time: ${item.appointmentTime} (Malaysia time)`;
   card.querySelector('.appointment-notes').textContent = item.notes || 'No additional notes.';
   if (item.rejectionReason) {
     const reason = card.querySelector('.rejection-reason');
@@ -181,6 +182,34 @@ function appointmentCard(item) {
       await loadAppointmentsPage();
     } catch (error) { showAlert(error.message, 'error'); }
   });
+  if (item.status === 'reschedule_proposed') {
+    const actions = document.createElement('div');
+    actions.className = 'proposal-actions';
+    const explanation = document.createElement('p');
+    explanation.textContent = 'Staff proposed this new time and released your original slot. Accept to confirm, or decline to cancel.';
+    actions.append(explanation);
+    ['accept', 'decline'].forEach(decision => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cancel-appointment';
+      button.textContent = decision === 'accept' ? 'Accept new time' : 'Decline and cancel';
+      button.addEventListener('click', async () => {
+        if (!window.confirm(decision === 'accept' ? 'Confirm this proposed appointment time?' : 'Decline this time and cancel the appointment?')) return;
+        actions.querySelectorAll('button').forEach(control => { control.disabled = true; });
+        try {
+          const result = await api('/api/patient/appointments/' + item.id + '/respond', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, appointmentDate: item.appointmentDate, appointmentTime: item.appointmentTime }),
+          });
+          showAlert(result.message);
+          await loadAppointmentsPage();
+        } catch (error) { showAlert(error.message, 'error'); }
+        finally { actions.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
+      });
+      actions.append(button);
+    });
+    card.append(actions);
+  }
   return card;
 }
 
@@ -191,7 +220,7 @@ async function loadAppointmentsPage() {
     <div class="appointment-layout">
       <section class="feature-form-card"><p class="eyebrow">New request</p><h2>Book an appointment</h2><p>Appointments require confirmation from clinic staff.</p><form id="appointment-form">
         <label>Clinic service<select name="serviceId" required><option value="">Select a service</option></select></label>
-        <div class="feature-form-row"><label>Date<input name="appointmentDate" type="date" required /></label><label>Available time<select name="appointmentTime" required><option value="">Select a time slot</option><option value="09:00">9:00 am</option><option value="09:30">9:30 am</option><option value="10:00">10:00 am</option><option value="10:30">10:30 am</option><option value="11:00">11:00 am</option><option value="11:30">11:30 am</option><option value="14:00">2:00 pm</option><option value="14:30">2:30 pm</option><option value="15:00">3:00 pm</option><option value="15:30">3:30 pm</option><option value="16:00">4:00 pm</option><option value="16:30">4:30 pm</option></select><small>Prototype clinic hours; the clinic must confirm these slots.</small></label></div>
+        <div class="feature-form-row"><label>Date<input name="appointmentDate" type="date" required /></label><label>Available time<select name="appointmentTime" required disabled><option value="">Select a date first</option></select><small>Available 30-minute slots follow clinic hours, in Malaysia time.</small></label></div>
         <label>Additional notes <small>Optional</small><textarea name="notes" maxlength="500" rows="4" placeholder="Briefly describe anything the clinic should know."></textarea></label>
         <button class="feature-submit" type="submit">Submit appointment request</button><p id="appointment-status" class="inline-status" role="status" hidden></p>
       </form></section>
@@ -203,9 +232,24 @@ async function loadAppointmentsPage() {
   const requestedService = new URLSearchParams(window.location.search).get('service');
   if (requestedService) select.value = requestedService;
   const dateInput = document.querySelector('[name="appointmentDate"]');
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  dateInput.min = tomorrow.toISOString().slice(0, 10);
+  dateInput.min = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const timeSelect = document.querySelector('[name="appointmentTime"]');
+  const submit = document.querySelector('#appointment-form [type="submit"]');
+  submit.disabled = true;
+  let version = 0;
+  dateInput.addEventListener('change', async () => {
+    const current = ++version;
+    timeSelect.disabled = true;
+    submit.disabled = true;
+    timeSelect.replaceChildren(new Option('Loading available times…', ''));
+    try {
+      const data = await api('/api/patient/appointments/availability?date=' + encodeURIComponent(dateInput.value));
+      if (current !== version) return;
+      timeSelect.replaceChildren(new Option(data.slots.length ? 'Select a time slot' : 'No available times', ''), ...data.slots.map(time => new Option(time, time)));
+      timeSelect.disabled = !data.slots.length;
+      submit.disabled = !data.slots.length;
+    } catch (error) { if (current === version) showAlert(error.message, 'error'); }
+  });
   const list = document.querySelector('#appointment-list');
   if (appointmentData.appointments.length) list.replaceChildren(...appointmentData.appointments.map(appointmentCard));
   else list.innerHTML = '<div class="feature-empty"><strong>No appointment requests</strong><p>Your requests and clinic decisions will appear here.</p></div>';
@@ -217,6 +261,8 @@ async function submitAppointment(event) {
   const form = event.currentTarget;
   const status = document.querySelector('#appointment-status');
   const payload = Object.fromEntries(new FormData(form));
+  const button = form.querySelector('[type="submit"]');
+  button.disabled = true;
   try {
     const result = await api('/api/patient/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     showAlert(result.message);
@@ -225,7 +271,7 @@ async function submitAppointment(event) {
     status.textContent = error.message;
     status.className = 'inline-status error';
     status.hidden = false;
-  }
+  } finally { button.disabled = false; }
 }
 
 function notificationCard(item) {

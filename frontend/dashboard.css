@@ -54,6 +54,22 @@ gap:18px;
 font-size:13px;
 font-weight:600
 }
+.portal-account>a {
+max-width:240px;
+overflow:hidden;
+color:var(--ink);
+text-decoration:none;
+text-overflow:ellipsis;
+white-space:nowrap
+}
+.portal-account>a:hover {
+color:var(--blue)
+}
+.portal-account>a:focus-visible {
+border-radius:5px;
+outline:3px solid rgba(34,88,245,.25);
+outline-offset:4px
+}
 .portal-layout {
 min-height:calc(100vh - 74px);
 display:grid;
@@ -328,11 +344,15 @@ padding:10px 20px;
 overflow-x:auto;
 flex-direction:row;
 border-right:0;
-border-bottom:1px solid var(--line)
+border-bottom:1px solid var(--line);
+scrollbar-width:thin;
+scroll-snap-type:x proximity
 }
 .portal-nav a,.portal-nav button {
 width:auto;
-white-space:nowrap
+min-height:44px;
+white-space:nowrap;
+scroll-snap-align:center
 }
 .patient-main {
 width:min(100% - 36px,760px)
@@ -350,6 +370,19 @@ grid-template-columns:1fr
 .portal-header {
 height:auto;
 padding:16px 18px
+}
+.portal-header .brand {
+font-size:20px
+}
+.portal-account {
+gap:10px
+}
+.portal-account>a {
+max-width:120px
+}
+.portal-account .action-button {
+min-height:42px;
+padding:9px 12px
 }
 .portal-account>span {
 display:none

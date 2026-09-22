@@ -12,21 +12,23 @@ describe('system endpoints', () => {
     const response = await request(app).get('/api/project-status');
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.milestone).toBe('Patient portal');
+    expect(response.body.milestone).toBe('Administrator portal');
     expect(response.body.completed.length).toBeGreaterThan(0);
   });
 
   test('returns the available clinic services', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{ id: 1, name: 'General Consultation', averageDurationMinutes: 15, isQueueOpen: 1 }]]);
     const response = await request(app).get('/api/services');
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.source).toBe('development-data');
-    expect(response.body.services).toHaveLength(5);
+    expect(response.body.source).toBe('database');
+    expect(response.body.services).toHaveLength(1);
     expect(response.body.services[0]).toMatchObject({
       name: 'General Consultation',
       averageDurationMinutes: 15,
       availability: 'Available',
     });
+    execute.mockRestore();
   });
 
   test('serves the completed homepage feature sections', async () => {
@@ -393,6 +395,8 @@ describe('system endpoints', () => {
     const connection = {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 1 }]])
+        .mockResolvedValueOnce([Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))])
         .mockResolvedValueOnce([[{ id: 2, name: 'General Consultation' }]])
         .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([{ insertId: 44 }])
@@ -407,7 +411,7 @@ describe('system endpoints', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.body.appointmentId).toBe(44);
-    expect(connection.execute.mock.calls[2][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
+    expect(connection.execute.mock.calls[4][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
     execute.mockRestore();

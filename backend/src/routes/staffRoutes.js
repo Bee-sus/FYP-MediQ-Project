@@ -5,18 +5,16 @@ const { requireRole } = require('../middleware/authentication');
 const router = express.Router();
 
 const transitions = {
-  waiting: new Set(['called', 'skipped']),
-  called: new Set(['in_progress', 'skipped']),
+  waiting: new Set(['called', 'cancelled']),
+  called: new Set(['in_progress', 'cancelled']),
   in_progress: new Set(['completed']),
-  skipped: new Set(['waiting', 'called']),
 };
 
 const transitionDetails = {
   called: { title: 'It is your turn', message: 'Clinic staff have called your queue number. Please proceed to the clinic counter.' },
   in_progress: { title: 'Consultation started', message: 'Your consultation is now in progress.' },
   completed: { title: 'Consultation completed', message: 'Your consultation has been marked as completed. Thank you for visiting.' },
-  skipped: { title: 'Queue number skipped', message: 'Your queue number was skipped. Please speak to clinic staff if you are present.' },
-  waiting: { title: 'Returned to queue', message: 'Clinic staff have returned your number to the waiting queue.' },
+  cancelled: { title: 'Queue cancelled by staff', message: 'Clinic staff cancelled your queue entry.' },
 };
 
 router.get('/overview', ...requireRole('staff'), async (request, response) => {
@@ -27,7 +25,7 @@ router.get('/overview', ...requireRole('staff'), async (request, response) => {
               SUM(status = 'called') AS called,
               SUM(status = 'in_progress') AS inProgress,
               SUM(status = 'completed') AS completed,
-              SUM(status = 'skipped') AS skipped
+              SUM(status = 'cancelled') AS cancelled
        FROM queue_entries WHERE queue_date = CURRENT_DATE`,
     );
     const [appointmentRows] = await pool.execute("SELECT COUNT(*) AS pendingAppointments FROM appointments WHERE status = 'pending'");
@@ -41,7 +39,7 @@ router.get('/overview', ...requireRole('staff'), async (request, response) => {
       summary: {
         total: Number(counts[0].total || 0), waiting: Number(counts[0].waiting || 0),
         called: Number(counts[0].called || 0), inProgress: Number(counts[0].inProgress || 0),
-        completed: Number(counts[0].completed || 0), skipped: Number(counts[0].skipped || 0),
+        completed: Number(counts[0].completed || 0), cancelled: Number(counts[0].cancelled || 0),
         pendingAppointments: Number(appointmentRows[0].pendingAppointments || 0),
         averageDuration: durationRows[0].averageDuration == null ? null : Number(durationRows[0].averageDuration),
       },
@@ -60,10 +58,10 @@ router.get('/queues', ...requireRole('staff'), async (request, response) => {
     const [entries] = await pool.execute(
       `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
               q.called_at AS calledAt, q.consultation_started_at AS consultationStartedAt,
-              q.service_id AS serviceId, u.full_name AS patientName
+              q.service_id AS serviceId, q.cancellation_reason AS cancellationReason, u.full_name AS patientName
        FROM queue_entries q JOIN users u ON u.id = q.patient_id
-       WHERE q.queue_date = CURRENT_DATE AND q.status IN ('waiting','called','in_progress','skipped')
-       ORDER BY q.service_id, FIELD(q.status, 'in_progress','called','waiting','skipped'), q.queue_number`,
+       WHERE q.queue_date = CURRENT_DATE AND q.status IN ('waiting','called','in_progress','cancelled')
+       ORDER BY q.service_id, FIELD(q.status, 'in_progress','called','waiting','cancelled'), q.queue_number`,
     );
     return response.json({ services, entries });
   } catch (error) {
@@ -104,6 +102,8 @@ router.patch('/services/:serviceId/queue', ...requireRole('staff'), async (reque
 router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request, response) => {
   const queueId = Number(request.params.queueId);
   const nextStatus = String(request.body.status || '');
+  const reason = String(request.body.reason || '').trim();
+  if (nextStatus === 'cancelled' && (reason.length < 3 || reason.length > 300)) return response.status(422).json({ error: 'Provide a cancellation reason between 3 and 300 characters.' });
   if (!Number.isSafeInteger(queueId) || queueId < 1 || !transitionDetails[nextStatus]) {
     return response.status(422).json({ error: 'Provide a valid queue entry and status.' });
   }
@@ -142,12 +142,16 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
     const timestamps = nextStatus === 'called' ? ', called_at = CURRENT_TIMESTAMP'
       : nextStatus === 'in_progress' ? ', consultation_started_at = CURRENT_TIMESTAMP'
         : nextStatus === 'completed' ? ', completed_at = CURRENT_TIMESTAMP' : '';
-    await connection.execute(`UPDATE queue_entries SET status = ?${timestamps} WHERE id = ?`, [nextStatus, queueId]);
+    if (nextStatus === 'cancelled') {
+      await connection.execute('UPDATE queue_entries SET status = ?, cancelled_at = CURRENT_TIMESTAMP, cancellation_reason = ? WHERE id = ?', [nextStatus, reason, queueId]);
+    } else {
+      await connection.execute(`UPDATE queue_entries SET status = ?${timestamps} WHERE id = ?`, [nextStatus, queueId]);
+    }
     const notice = transitionDetails[nextStatus];
     await connection.execute(
       `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
        VALUES (?, ?, ?, ?, 'queue')`,
-      [entry.patientId, queueId, notice.title, notice.message],
+      [entry.patientId, queueId, notice.title, nextStatus === 'cancelled' ? `${notice.message} Reason: ${reason}` : notice.message],
     );
     await connection.execute(
       `INSERT INTO staff_audit_logs (staff_id, action, entity_type, entity_id, details)

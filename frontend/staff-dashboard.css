@@ -105,7 +105,7 @@
 .queue-legend .waiting, .staff-status[data-status="waiting"] { background: var(--staff-accent-soft); color: var(--staff-accent-dark); }
 .queue-legend .called, .staff-status[data-status="called"] { background: #fff1d8; color: var(--staff-amber); }
 .queue-legend .in-progress, .staff-status[data-status="in_progress"] { background: #e2f7ef; color: var(--staff-green); }
-.queue-legend .skipped, .staff-status[data-status="skipped"] { background: #fee9e7; color: #ad3026; }
+.queue-legend .cancelled, .staff-status[data-status="cancelled"] { background: #fee9e7; color: #ad3026; }
 
 .service-queues { display: grid; gap: 18px; }
 .service-queue-panel { overflow: hidden; border: 1px solid var(--staff-line); border-radius: 20px; background: #fff; box-shadow: 0 14px 34px rgba(15, 31, 61, 0.05); }
@@ -151,8 +151,8 @@
   .staff-header { padding: 12px 18px; }
   .staff-account div { display: none; }
   .staff-layout { display: block; }
-  .staff-nav { position: sticky; z-index: 8; top: 78px; display: flex; min-height: auto; padding: 10px 18px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--staff-line); }
-  .staff-nav a, .staff-nav button { width: auto; white-space: nowrap; }
+  .staff-nav { position: sticky; z-index: 8; top: 78px; display: flex; min-height: auto; padding: 10px 18px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--staff-line); scrollbar-width: thin; scroll-snap-type: x proximity; }
+  .staff-nav a, .staff-nav button { width: auto; min-height: 44px; white-space: nowrap; scroll-snap-align: center; }
   .staff-nav-divider { display: none; }
   .staff-main { width: min(100% - 32px, 650px); padding-top: 36px; }
   .staff-heading, .staff-section-heading { align-items: flex-start; flex-direction: column; }
@@ -168,3 +168,20 @@
   .summary-card { min-height: 125px; }
   .service-queue-panel > header { align-items: flex-start; flex-direction: column; }
 }
+
+#staff-appointments { display: grid; gap: 16px; }
+.staff-appointment { background: white; border: 1px solid #dce5e3; border-radius: 16px; padding: 24px; overflow-wrap: anywhere; }
+.staff-appointment h3 { margin: 0 0 10px; }
+.staff-appointment p { margin: 8px 0; }
+.staff-appointment .queue-actions { margin-top: 18px; flex-wrap: wrap; }
+#appointments label, #appointment-dialog label { display: grid; gap: 8px; margin: 12px 0; }
+#appointments select, #appointment-dialog input, #appointment-dialog select, #appointment-dialog textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #b6c9c5; border-radius: 8px; font: inherit; }
+#appointment-dialog { width: min(520px, calc(100vw - 32px)); max-height: 90vh; overflow-y: auto; }
+#appointment-dialog-error { color: #ad3026; }
+.staff-status[data-status="approved"] { background: #e1f4ec; color: #146449; }
+.staff-status[data-status="reschedule_proposed"] { background: #fff1cf; color: #745300; }
+
+#appointment-dialog #reschedule-fields { display: block; }
+.staff-dialog [hidden] { display: none !important; }
+.staff-dialog button:disabled { opacity: 0.55; cursor: wait; }
+.patient-details { overflow-wrap: anywhere; }

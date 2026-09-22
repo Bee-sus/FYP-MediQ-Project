@@ -1,0 +1,88 @@
+// Runs in a newly created disposable database. The configured application database is untouched.
+require('dotenv').config();
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const mysql = require('mysql2/promise');
+const request = require('supertest');
+
+(async () => {
+  const database = 'mediq_admin_check_' + crypto.randomBytes(8).toString('hex');
+  const owner = await mysql.createConnection({ host: process.env.DB_HOST || 'localhost', port: Number(process.env.DB_PORT || 3306), user: process.env.DB_USER || 'root', password: process.env.DB_PASSWORD || '', multipleStatements: true });
+  let created = false;
+  let pool;
+  try {
+    await owner.query(`CREATE DATABASE \`${database}\``);
+    created = true;
+    const schema = fs.readFileSync(path.join(__dirname, '../../database/schema.sql'), 'utf8').replace(/\bmediq\b/g, database);
+    await owner.query(schema);
+    await require('../../database/adminMigration').migrateAdmin(owner);
+    process.env.DB_NAME = database;
+    const app = require('../src/app');
+    pool = require('../src/config/database').pool;
+    const { tokenHash } = require('../src/middleware/authentication');
+    const [admin] = await pool.execute("INSERT INTO users (full_name, email, password_hash, role) VALUES ('Test Administrator', 'admin@example.invalid', 'unusable', 'admin')");
+    const token = crypto.randomBytes(24).toString('hex');
+    await pool.execute('INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))', [admin.insertId, tokenHash(token)]);
+    const cookie = `mediq_session=${token}`;
+    const api = (method, endpoint, data) => {
+      const call = request(app)[method]('/api/admin' + endpoint).set('Cookie', cookie);
+      return data ? call.send(data) : call;
+    };
+    const createdStaff = await api('post', '/staff', { fullName: 'Test Staff', email: 'staff@example.invalid', password: 'Test-Staff-2026!', role: 'admin' });
+    assert.equal(createdStaff.status, 201);
+    const staffId = createdStaff.body.staffId;
+    const login = await request(app).post('/api/auth/login').send({ email: 'staff@example.invalid', password: 'Test-Staff-2026!', role: 'staff' });
+    assert.equal(login.status, 200);
+    const staffCookie = login.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await request(app).get('/api/admin/staff').set('Cookie', staffCookie)).status, 403);
+    assert.equal((await api('patch', `/staff/${staffId}`, { isActive: false })).status, 200);
+    assert.equal((await request(app).get('/api/staff/overview').set('Cookie', staffCookie)).status, 401);
+    assert.equal((await request(app).post('/api/auth/login').send({ email: 'staff@example.invalid', password: 'Test-Staff-2026!', role: 'staff' })).status, 401);
+    assert.equal((await api('patch', `/staff/${staffId}`, { isActive: true })).status, 200);
+
+    const service = { name: 'Verification service', description: 'For isolated tests', averageDurationMinutes: 20, isActive: true };
+    const createdService = await api('post', '/services', service);
+    assert.equal(createdService.status, 201);
+    const serviceId = createdService.body.serviceId;
+    assert((await request(app).get('/api/services')).body.services.some(item => item.id === serviceId));
+    const registration = await request(app).post('/api/auth/register').send({ fullName: 'Test Patient', email: 'patient@example.invalid', phone: '+60 12-345 6789', birthDate: '2000-01-01', gender: 'other', password: 'Test-Patient-2026!', confirmPassword: 'Test-Patient-2026!', terms: true });
+    assert.equal(registration.status, 201);
+    const patientLogin = await request(app).post('/api/auth/login').send({ email: 'patient@example.invalid', password: 'Test-Patient-2026!', role: 'patient' });
+    assert.equal(patientLogin.status, 200);
+    const patientCookie = patientLogin.headers['set-cookie'][0].split(';')[0];
+    const hours = await api('get', '/hours');
+    assert.equal(hours.status, 200);
+    const days = hours.body.days;
+    const date = '2099-10-10';
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    days[weekday].isOpen = false;
+    const closed = await api('put', '/hours', { revision: hours.body.revision, days });
+    assert.equal(closed.status, 200);
+    const availability = () => request(app).get(`/api/patient/appointments/availability?date=${date}`).set('Cookie', patientCookie);
+    assert.deepEqual((await availability()).body.slots, []);
+    const book = () => request(app).post('/api/patient/appointments').set('Cookie', patientCookie).send({ serviceId, appointmentDate: date, appointmentTime: '09:00' });
+    assert.equal((await book()).status, 409);
+    days[weekday].isOpen = true;
+    const reopened = await api('put', '/hours', { revision: closed.body.revision, days });
+    assert.equal(reopened.status, 200);
+    assert((await availability()).body.slots.includes('09:00'));
+    assert.equal((await book()).status, 201);
+    days[weekday].isOpen = false;
+    assert.equal((await api('put', '/hours', { revision: reopened.body.revision, days })).status, 409, 'Hours cannot invalidate a booking');
+    assert.equal((await api('put', `/services/${serviceId}`, { ...service, isActive: false })).status, 409, 'Booked services cannot be deactivated');
+    const audits = await api('get', '/audit');
+    assert.equal(audits.status, 200);
+    assert(audits.body.items.some(item => item.action === 'clinic_hours_updated'));
+    assert(audits.body.items.some(item => item.action === 'staff_deactivated'));
+    assert.equal((await api('get', '/overview')).status, 200);
+    console.log('Administrator MySQL workflow passed: accounts, role restrictions, session revocation, services, public listing, weekly hours, availability, booking protection and audit history.');
+  } finally {
+    if (pool) await pool.end();
+    // This identifier is generated above; CREATE DATABASE must have succeeded before cleanup.
+    if (created) await owner.query(`DROP DATABASE \`${database}\``);
+    await owner.end();
+    console.log('Disposable verification database removed. Application data was not changed.');
+  }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });

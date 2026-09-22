@@ -23,7 +23,7 @@ router.get('/health', async (request, response) => {
 
 router.get('/project-status', (request, response) => {
   response.json({
-    milestone: 'Patient portal',
+    milestone: 'Administrator portal',
     completed: [
       'Node.js and Express server scaffold',
       'Initial responsive user interface',
@@ -40,10 +40,15 @@ router.get('/project-status', (request, response) => {
       'Patient queue history, profile and password management',
       'Staff operations overview and live queue management',
       'Validated queue transitions with patient notifications and audit records',
+      'Staff appointment decisions and patient reschedule responses',
+      'Concurrent appointment conflict prevention and available slots',
+      'Administrator staff account and clinic service management',
+      'Configurable weekly appointment hours and breaks',
+      'Administrator and staff activity log',
       'Machine-learning service boundary defined',
     ],
     planned: [
-      'Staff queue management dashboard',
+      'Clinic closure dates and operational reporting',
       'Waiting-time model training and evaluation',
     ],
   });

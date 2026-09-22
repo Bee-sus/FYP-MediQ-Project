@@ -3,9 +3,12 @@ const { pool } = require('../config/database');
 const { requireRole } = require('../middleware/authentication');
 const { hashPassword, verifyPassword, meetsPasswordRules } = require('../services/passwordService');
 
+const { validDate, futureSlot, lockBookings, hasConflict } = require('../services/appointmentService');
+
+const { validTime, slotIsOpen } = require('../services/clinicScheduleService');
+
 const router = express.Router();
 const activeStatuses = "'waiting','called','in_progress'";
-const appointmentSlots = new Set(['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30']);
 
 function queueSelect(whereClause) {
   return `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
@@ -39,12 +42,12 @@ router.get('/overview', ...requireRole('patient'), async (request, response) => 
       [request.user.id],
     );
     const [appointments] = await pool.execute(
-      `SELECT a.id, a.appointment_date AS appointmentDate,
+      `SELECT a.id, DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointmentDate,
               TIME_FORMAT(a.appointment_time, '%H:%i') AS appointmentTime,
               a.status, s.name AS serviceName
        FROM appointments a JOIN clinic_services s ON s.id = a.service_id
        WHERE a.patient_id = ? AND a.appointment_date >= CURRENT_DATE
-         AND a.status IN ('pending', 'approved')
+         AND a.status IN ('pending', 'approved', 'reschedule_proposed')
        ORDER BY a.appointment_date, a.appointment_time LIMIT 1`,
       [request.user.id],
     );
@@ -254,7 +257,7 @@ router.get('/history', ...requireRole('patient'), async (request, response) => {
 router.get('/appointments', ...requireRole('patient'), async (request, response) => {
   try {
     const [items] = await pool.execute(
-      `SELECT a.id, a.appointment_date AS appointmentDate, TIME_FORMAT(a.appointment_time, '%H:%i') AS appointmentTime,
+      `SELECT a.id, DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointmentDate, TIME_FORMAT(a.appointment_time, '%H:%i') AS appointmentTime,
               a.notes, a.status, a.rejection_reason AS rejectionReason, a.created_at AS createdAt,
               s.name AS serviceName
        FROM appointments a JOIN clinic_services s ON s.id = a.service_id
@@ -272,32 +275,32 @@ router.post('/appointments', ...requireRole('patient'), async (request, response
   const date = String(request.body.appointmentDate || '');
   const time = String(request.body.appointmentTime || '');
   const notes = String(request.body.notes || '').trim();
-  const today = new Date();
-  const requestedDate = new Date(`${date}T${time || '00:00'}:00`);
   if (!Number.isSafeInteger(serviceId) || serviceId < 1) return response.status(422).json({ error: 'Select a valid clinic service.' });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(requestedDate.valueOf()) || requestedDate <= today) {
+  if (!validDate(date)) {
     return response.status(422).json({ error: 'Select a future appointment date.' });
   }
-  if (!appointmentSlots.has(time)) {
+  if (!validTime(time)) {
     return response.status(422).json({ error: 'Select one of the available clinic time slots.' });
   }
+  if (!futureSlot(date, time)) return response.status(422).json({ error: 'Select a future appointment date and time.' });
   if (notes.length > 500) return response.status(422).json({ error: 'Appointment notes cannot exceed 500 characters.' });
   let connection;
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    await lockBookings(connection);
+    if (!(await slotIsOpen(connection, date, time))) {
+      await connection.rollback();
+      return response.status(409).json({ error: 'The clinic is closed at that time. Select an available slot.' });
+    }
     const [services] = await connection.execute('SELECT id, name FROM clinic_services WHERE id = ? AND is_active = TRUE', [serviceId]);
     if (!services.length) {
       await connection.rollback();
       return response.status(404).json({ error: 'This clinic service is unavailable.' });
     }
-    const [duplicates] = await connection.execute(
-      `SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND status IN ('pending','approved') LIMIT 1`,
-      [request.user.id, date],
-    );
-    if (duplicates.length) {
+    if (await hasConflict(connection, request.user.id, date, time)) {
       await connection.rollback();
-      return response.status(409).json({ error: 'You already have a pending or approved appointment on this date.' });
+      return response.status(409).json({ error: 'This slot is already reserved, or you already have an appointment on this date. Choose another available slot.' });
     }
     const [result] = await connection.execute(
       `INSERT INTO appointments (patient_id, service_id, appointment_date, appointment_time, notes)
@@ -326,8 +329,9 @@ router.post('/appointments/:appointmentId/cancel', ...requireRole('patient'), as
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    await lockBookings(connection);
     const [rows] = await connection.execute(
-      `SELECT id FROM appointments WHERE id = ? AND patient_id = ? AND status IN ('pending','approved') FOR UPDATE`,
+      `SELECT id FROM appointments WHERE id = ? AND patient_id = ? AND status IN ('pending','approved','reschedule_proposed') FOR UPDATE`,
       [appointmentId, request.user.id],
     );
     if (!rows.length) {

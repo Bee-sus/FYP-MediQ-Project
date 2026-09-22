@@ -113,8 +113,8 @@ function renderAppointment(appointment) {
   container.querySelector('strong').textContent = String(date.getDate()).padStart(2, '0');
   container.querySelector('span').textContent = new Intl.DateTimeFormat('en-MY', { month: 'short' }).format(date);
   container.querySelector('h3').textContent = appointment.serviceName;
-  container.querySelector('p').textContent = `${appointment.appointmentTime} · ${appointment.status}`;
-  container.querySelector('small').textContent = appointment.status === 'pending' ? 'Awaiting clinic approval' : 'Confirmed by the clinic';
+  container.querySelector('p').textContent = `${appointment.appointmentTime} · ${appointment.status === 'reschedule_proposed' ? 'Awaiting your response' : appointment.status}`;
+  container.querySelector('small').textContent = appointment.status === 'reschedule_proposed' ? 'Open Appointments to accept or decline the new time' : appointment.status === 'pending' ? 'Awaiting clinic approval' : 'Confirmed by the clinic';
 }
 
 function renderNotifications(items, unreadCount) {
@@ -176,4 +176,5 @@ async function loadPatientDashboard() {
 }
 
 document.querySelector('#logout-button').addEventListener('click', logout);
+document.querySelector('.portal-nav .active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 loadPatientDashboard();

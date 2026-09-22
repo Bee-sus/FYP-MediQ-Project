@@ -18,7 +18,7 @@ async function authenticate(request, response, next) {
     const [rows] = await pool.execute(
       `SELECT u.id, u.full_name AS fullName, u.email, u.role
        FROM user_sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > NOW() LIMIT 1`,
+       WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = TRUE LIMIT 1`,
       [tokenHash(token)],
     );
     if (!rows.length) return response.status(401).json({ error: 'Your session has expired. Please sign in again.' });

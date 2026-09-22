@@ -21,8 +21,7 @@
       <nav class="staff-nav" aria-label="Staff portal">
         <a class="active" href="#overview" aria-current="page"><span aria-hidden="true">⌂</span>Overview</a>
         <a href="#live-queue"><span aria-hidden="true">Q</span>Live queue</a>
-        <span class="staff-nav-divider">Next stage</span>
-        <button type="button" disabled><span aria-hidden="true">□</span>Appointments</button>
+        <a href="#appointments"><span aria-hidden="true">□</span>Appointments</a>
       </nav>
 
       <main class="staff-main">
@@ -43,11 +42,17 @@
         <section id="live-queue" class="staff-section" aria-labelledby="queue-heading">
           <div class="staff-section-heading">
             <div><p class="staff-eyebrow">Live operations</p><h2 id="queue-heading">Service queues</h2><p>Open a service, review its waiting list, and update each patient in order.</p></div>
-            <div class="queue-legend" aria-label="Queue statuses"><span class="waiting">Waiting</span><span class="called">Called</span><span class="in-progress">In consultation</span><span class="skipped">Skipped</span></div>
+            <div class="queue-legend" aria-label="Queue statuses"><span class="waiting">Waiting</span><span class="called">Called</span><span class="in-progress">In consultation</span><span class="cancelled">Cancelled</span></div>
           </div>
           <div id="service-queues" class="service-queues" aria-live="polite">
             <p class="staff-loading">Loading live queues…</p>
           </div>
+        </section>
+        <section id="appointments" class="staff-section" aria-labelledby="appointments-heading">
+          <div class="staff-section-heading"><div><p class="staff-eyebrow">Appointment requests</p><h2 id="appointments-heading">Manage appointments</h2><p>Review requests or propose a new time for the patient to accept.</p></div>
+            <label>Filter by status<select id="appointment-filter"><option value="pending">Pending</option><option value="approved">Approved</option><option value="reschedule_proposed">Awaiting patient response</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option><option value="">All</option></select></label>
+          </div>
+          <div id="staff-appointments" aria-live="polite"><p>Loading appointments…</p></div>
         </section>
       </main>
     </div>
@@ -61,6 +66,20 @@
       </form>
     </dialog>
 
+    <dialog id="appointment-dialog" class="staff-dialog" aria-labelledby="appointment-dialog-title">
+      <form id="staff-appointment-form">
+        <h2 id="appointment-dialog-title">Appointment decision</h2>
+        <p id="appointment-dialog-description"></p>
+        <div id="reschedule-fields" hidden>
+          <label>Proposed date<input id="proposed-date" type="date" /></label>
+          <label>Available time (Malaysia time)<select id="proposed-time"><option value="">Select a date first</option></select></label>
+          <p>The original slot will be released. The new slot is held until the patient accepts or declines.</p>
+        </div>
+        <label id="appointment-reason-label">Reason<textarea id="appointment-reason" minlength="3" maxlength="300" rows="3"></textarea></label>
+        <p id="appointment-dialog-error" role="alert"></p>
+        <div><button id="appointment-dialog-cancel" type="button" class="staff-secondary-button">Go back</button><button id="appointment-dialog-submit" type="submit" class="staff-primary-button">Confirm</button></div>
+      </form>
+    </dialog>
     <script src="staff-dashboard.js"></script>
   </body>
 </html>

@@ -35,6 +35,7 @@ async function loadClinicServices() {
 
     const data = await response.json();
     servicesList.replaceChildren(...data.services.map(createServiceCard));
+    if (!data.services.length) servicesList.textContent = 'No clinic services are currently available.';
   } catch (error) {
     const message = document.createElement('p');
     message.className = 'services-message error';

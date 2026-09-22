@@ -7,7 +7,8 @@ const serviceRoutes = require('./routes/serviceRoutes');
 const authRoutes = require('./routes/authRoutes');
 const patientRoutes = require('./routes/patientRoutes');
 const staffRoutes = require('./routes/staffRoutes');
-const { requireRole } = require('./middleware/authentication');
+const appointmentRoutes = require('./routes/appointmentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const frontendDirectory = path.join(__dirname, '../../frontend');
@@ -21,8 +22,10 @@ app.use('/api', systemRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/patient', patientRoutes);
+app.use('/api/patient', appointmentRoutes.patient);
 app.use('/api/staff', staffRoutes);
-app.get('/api/admin/overview', ...requireRole('admin'), (request, response) => response.json({ message: 'Administrator dashboard access confirmed.', user: request.user }));
+app.use('/api/staff', appointmentRoutes.staff);
+app.use('/api/admin', adminRoutes);
 app.use(express.static(frontendDirectory));
 
 app.get('*', (request, response) => {

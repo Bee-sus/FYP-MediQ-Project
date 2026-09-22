@@ -8,7 +8,9 @@
     "dev": "nodemon backend/src/server.js",
     "start": "node backend/src/server.js",
     "db:setup": "node database/setup.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "db:migrate:appointments": "node database/appointmentMigration.js",
+    "db:migrate:admin": "node database/adminMigration.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

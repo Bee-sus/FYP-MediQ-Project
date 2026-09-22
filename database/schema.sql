@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS waiting_time_predictions (
   CONSTRAINT fk_prediction_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id)
 );
 
+CREATE TABLE IF NOT EXISTS appointment_booking_lock (
+  id TINYINT UNSIGNED PRIMARY KEY
+);
+INSERT IGNORE INTO appointment_booking_lock (id) VALUES (1);
+
 CREATE TABLE IF NOT EXISTS appointments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   patient_id BIGINT UNSIGNED NOT NULL,
@@ -74,7 +79,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   appointment_date DATE NOT NULL,
   appointment_time TIME NOT NULL,
   notes VARCHAR(500) NULL,
-  status ENUM('pending', 'approved', 'rejected', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+  status ENUM('pending', 'approved', 'rejected', 'completed', 'cancelled', 'reschedule_proposed') NOT NULL DEFAULT 'pending',
   rejection_reason VARCHAR(300) NULL,
   cancelled_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

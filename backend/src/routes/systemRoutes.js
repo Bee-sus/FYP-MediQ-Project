@@ -1,5 +1,5 @@
 const express = require('express');
-const { checkDatabaseConnection } = require('../config/database');
+const { checkDatabaseConnection, pool } = require('../config/database');
 
 const router = express.Router();
 
@@ -19,6 +19,11 @@ router.get('/health', async (request, response) => {
     database,
     timestamp: new Date().toISOString(),
   });
+});
+
+router.get('/settings', async (request, response) => {
+  try { const [rows] = await pool.execute('SELECT clinic_name AS clinicName, address, phone, timezone FROM clinic_settings WHERE id = 1'); return response.json({ settings: rows[0] }); }
+  catch (error) { return response.json({ settings: { clinicName: 'MediQ Clinic', address: null, phone: null, timezone: 'Asia/Kuala_Lumpur' } }); }
 });
 
 router.get('/project-status', (request, response) => {

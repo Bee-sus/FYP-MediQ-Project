@@ -32,41 +32,50 @@ beforeEach(() => {
       if (sql.includes('FROM users')) return [existingStaff];
       if (sql.includes('FROM clinic_services')) return [[{ id: 2 }]];
       if (sql.includes('FROM clinic_hours')) return [makeDays()];
+      if (sql.includes('FROM clinic_closures')) return [[]];
       return [{ affectedRows: 1, insertId: 9 }];
     }),
   };
   pool.getConnection.mockResolvedValue(connection);
 });
 
-test.each(['/overview', '/staff', '/services', '/hours', '/audit'])('requires authentication for %s', async path => {
+test.each(['/overview', '/staff', '/services', '/hours', '/closures', '/patients', '/settings', '/audit'])('requires authentication for %s', async path => {
   expect((await request(app).get('/api/admin' + path)).status).toBe(401);
 });
 
 test.each(['staff', 'patient'])('denies all administrator controls to %s', async role => {
   pool.execute.mockResolvedValue([[{ id: 9, role }]]);
-  for (const [method, path, body] of [['get', '/audit'], ['post', '/staff', {}], ['put', '/hours', {}], ['put', '/services/2', {}], ['patch', '/staff/9', { isActive: false }]]) {
+  for (const [method, path, body] of [['get', '/audit'], ['post', '/staff', {}], ['put', '/hours', {}], ['put', '/services/2', {}], ['patch', '/staff/9', { isActive: false }], ['delete', '/staff/9']]) {
     expect((await asAdmin(method, path, body)).status).toBe(403);
   }
   expect(pool.getConnection).not.toHaveBeenCalled();
 });
 
 test('creates only a staff role, hashes credentials and excludes passwords from audits', async () => {
-  const password = 'Clinic-Staff-2026!';
-  const result = await asAdmin('post', '/staff', { fullName: 'Test Staff', email: 'STAFF@example.com', password, role: 'admin' });
+  const result = await asAdmin('post', '/staff', { staffCode: 'STF-001', fullName: 'Test Staff', email: 'STAFF@example.com', phone: '0123456789', role: 'admin' });
   expect(result.status).toBe(201);
   const [sql, params] = connection.execute.mock.calls.find(([query]) => query.startsWith('INSERT INTO users'));
   expect(sql).toContain("'staff', TRUE");
   expect(params[1]).toBe('staff@example.com');
-  expect(await verifyPassword(password, params[2])).toBe(true);
+  expect(await verifyPassword(result.body.credentials.temporaryPassword, params[4])).toBe(true);
+  expect(result.body.credentials.staffCode).toBe('STF-000009');
+  expect(connection.execute.mock.calls.some(([query, values]) => query.startsWith('UPDATE users SET staff_code') && values[0] === 'STF-000009')).toBe(true);
   const audit = connection.execute.mock.calls.find(([query]) => query.includes('INSERT INTO admin_audit_logs'));
-  expect(JSON.stringify(audit)).not.toContain(password);
+  expect(JSON.stringify(audit)).not.toContain(result.body.credentials.temporaryPassword);
   expect(result.body).not.toHaveProperty('password');
   expect(connection.commit).toHaveBeenCalled();
 });
 
-test('rejects weak staff passwords without starting a transaction', async () => {
-  expect((await asAdmin('post', '/staff', { fullName: 'Test Staff', email: 'staff@example.com', password: 'weak' })).status).toBe(422);
+test('rejects incomplete staff details without starting a transaction', async () => {
+  expect((await asAdmin('post', '/staff', { fullName: 'Test Staff', email: 'invalid' })).status).toBe(422);
   expect(pool.getConnection).not.toHaveBeenCalled();
+});
+
+test('accepts a resized image data URL for a staff profile', async () => {
+  const result = await asAdmin('post', '/staff', { staffCode: 'STF-IMG', fullName: 'Photo Staff', email: 'photo@example.com', phone: '0123456789', profilePictureUrl: 'data:image/jpeg;base64,/9j/AA==', password: 'Clinic-Staff-2026!' });
+  expect(result.status).toBe(201);
+  const [, params] = connection.execute.mock.calls.find(([query]) => query.startsWith('INSERT INTO users'));
+  expect(params[3]).toBe('data:image/jpeg;base64,/9j/AA==');
 });
 
 test('deactivation revokes sessions and retains the account and history', async () => {
@@ -81,6 +90,17 @@ test('cannot deactivate administrators or patients through the staff endpoint', 
   existingStaff = [];
   expect((await asAdmin('patch', '/staff/8', { isActive: false })).status).toBe(404);
   expect(connection.commit).not.toHaveBeenCalled();
+});
+
+test('permanently deletes a staff account and its dependent access records', async () => {
+  const result = await asAdmin('delete', '/staff/9');
+  expect(result.status).toBe(200);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM user_sessions'))).toBe(true);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM email_verification_tokens'))).toBe(true);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM staff_audit_logs'))).toBe(true);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM users'))).toBe(true);
+  expect(connection.execute.mock.calls.some(([, values]) => values?.includes('staff_deleted'))).toBe(true);
+  expect(connection.commit).toHaveBeenCalled();
 });
 
 test('authentication rejects a deactivated user with a stale session', async () => {
@@ -154,6 +174,18 @@ test('saves a valid schedule under the shared booking lock with an audit record'
   expect(connection.execute.mock.calls.filter(([sql]) => sql.startsWith('UPDATE clinic_hours'))).toHaveLength(7);
   expect(connection.execute.mock.calls.some(([sql]) => sql.includes('INSERT INTO admin_audit_logs'))).toBe(true);
   expect(connection.commit).toHaveBeenCalled();
+});
+
+test('adds a future closure when no active appointment exists', async () => {
+  expect((await asAdmin('post', '/closures', { closureDate: '2099-12-25', reason: 'Public holiday' })).status).toBe(201);
+  expect(connection.execute.mock.calls.some(([sql, params]) => sql.startsWith('INSERT INTO clinic_closures') && params[0] === '2099-12-25')).toBe(true);
+  expect(connection.commit).toHaveBeenCalled();
+});
+
+test('blocks a closure date containing an active appointment', async () => {
+  existingBookings = [{ id: 44 }];
+  expect((await asAdmin('post', '/closures', { closureDate: '2099-12-25', reason: 'Public holiday' })).status).toBe(409);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('INSERT INTO clinic_closures'))).toBe(false);
 });
 
 test('rolls back a configuration change if audit persistence fails', async () => {

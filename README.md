@@ -15,6 +15,8 @@ This repository contains the working Patient portal and first Staff operations m
 - Public patient registration only; Staff and Administrator accounts are clinic-issued
 - Accessible live registration validation and strong-password guidance
 - MySQL-backed patient registration, password hashing and secure role-aware sessions
+- One-time email verification for new Patient and Staff accounts, with 24-hour links
+- Automatically generated Staff temporary passwords, displayed once to the Administrator and replaced after first sign-in
 - Protected Patient, Staff and Administrator dashboard entry
 - MySQL-backed Patient dashboard, clinic-service selection and queue history
 - Transactional daily queue-number generation with duplicate-active-queue prevention
@@ -34,6 +36,15 @@ This repository contains the working Patient portal and first Staff operations m
 - Clinic services loaded dynamically from the Express API
 - Health and project-status API endpoints
 - Configurable MySQL connection
+- Automatic patient and Staff queue refresh while the relevant page is visible
+- Date-specific clinic closures that remove appointment availability
+- ML-ready prediction snapshots with queue context and actual waiting-time outcomes
+- Staff temporary-password replacement and secure password changes
+- Administrator patient search with queue and appointment history
+- In-system reminders for approved appointments occurring today or tomorrow
+- Optional daily queue capacity for each clinic service
+- Staff appointment search, date filters and pagination
+- Configurable clinic name, address, contact number and timezone
 - MySQL schema for users, services, queues, appointments, notifications and predictions
 - Small FastAPI prediction-service stub with a clearly labelled baseline calculation
 - Automated tests for public pages, authentication, ownership and Patient workflows
@@ -65,6 +76,8 @@ npm run dev
 The public pages still load if MySQL has not been configured, but registration and sign-in will clearly report that account services are unavailable.
 
 Staff and Administrator accounts are never publicly registered. Configure `SEED_STAFF_*` and `SEED_ADMIN_*` in `.env`; `npm run db:setup` creates or refreshes those controlled demonstration accounts using scrypt password hashes.
+
+To send real verification emails, configure `APP_BASE_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` and `SMTP_FROM` in `.env`, then restart the server. When SMTP is left blank during local development, the registration result displays a development verification link so the workflow can still be tested. Newly registered Patients and newly created Staff cannot sign in until they use the link. Existing accounts are marked as verified when the migration first adds this feature.
 
 ## Run the prediction-service stub
 
@@ -100,7 +113,7 @@ API documentation will be available at `http://127.0.0.1:8000/docs`.
 
 ## Next milestone
 
-The next development milestone is ML data preparation and a trained, evaluated waiting-time model. Date-specific clinic closures, operational reporting and automatic queue refreshing remain future improvements.
+The next development milestone is dataset preparation and a trained, evaluated waiting-time model. The application now records ML-ready queue context and actual waiting-time outcomes, supports operational reporting, handles special closure dates and automatically refreshes active queue views.
 
 ## Appointment rules and database upgrade
 

@@ -21,6 +21,7 @@ beforeEach(() => {
   connection = {
     beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(),
     execute: jest.fn(async (sql) => {
+      if (sql.includes('FROM clinic_closures')) return [[]];
       if (sql.includes('FROM clinic_hours')) return [Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))];
       if (sql.includes('appointment_booking_lock')) return [[{ id: 1 }]];
       if (sql.includes('id <> ?')) return [conflict ? [{ id: 99 }] : []];
@@ -162,12 +163,20 @@ test('cannot accept a stale proposal or accept twice', async () => {
 
 test('availability excludes reserved slots and only returns times', async () => {
   auth('patient');
-  pool.execute.mockResolvedValueOnce([[{ id: 7, role: 'patient' }]]).mockResolvedValueOnce([Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))]).mockResolvedValueOnce([[{ time: '10:30' }]]);
+  pool.execute.mockResolvedValueOnce([[{ id: 7, role: 'patient' }]]).mockResolvedValueOnce([[]]).mockResolvedValueOnce([Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))]).mockResolvedValueOnce([[{ time: '10:30' }]]);
   const result = await request(app).get('/api/patient/appointments/availability?date=2099-10-10').set('Cookie', 'mediq_session=test');
   expect(result.status).toBe(200);
   expect(result.body.slots).not.toContain('10:30');
   expect(result.body.slots).toContain('11:00');
-  expect(pool.execute.mock.calls[2][0]).toContain('reschedule_proposed');
+  expect(pool.execute.mock.calls[3][0]).toContain('reschedule_proposed');
+});
+
+test('availability returns no slots on a special closure date', async () => {
+  auth('patient');
+  pool.execute.mockResolvedValueOnce([[{ id: 7, role: 'patient' }]]).mockResolvedValueOnce([[{ reason: 'Public holiday' }]]).mockResolvedValueOnce([[]]);
+  const result = await request(app).get('/api/patient/appointments/availability?date=2099-10-10').set('Cookie', 'mediq_session=test');
+  expect(result.status).toBe(200);
+  expect(result.body).toMatchObject({ slots: [], closureReason: 'Public holiday' });
 });
 
 test('staff cancellation records a reason and is terminal', async () => {

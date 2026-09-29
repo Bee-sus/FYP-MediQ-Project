@@ -371,6 +371,10 @@
   height: 50px;
 }
 
+.activity-filter { display: grid; gap: 6px; color: var(--muted); font-size: .75rem; font-weight: 700; }
+.activity-filter select { min-width: 165px; min-height: 42px; padding: 8px 12px; border: 1px solid #d9e0ea; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; }
+.activity-count { margin: 0 0 12px; color: var(--muted); font-size: .8rem; }
+
 .feature-submit {
   min-height: 46px;
 }

@@ -24,4 +24,13 @@ function meetsPasswordRules(password) {
     && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
 }
 
-module.exports = { hashPassword, verifyPassword, meetsPasswordRules };
+function generateTemporaryPassword(length = 18) {
+  const groups = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%^&*'];
+  const pick = group => group[crypto.randomInt(group.length)];
+  const characters = groups.map(pick);
+  const all = groups.join('');
+  while (characters.length < length) characters.push(pick(all));
+  return characters.sort(() => crypto.randomInt(3) - 1).join('');
+}
+
+module.exports = { hashPassword, verifyPassword, meetsPasswordRules, generateTemporaryPassword };

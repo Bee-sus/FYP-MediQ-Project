@@ -1,5 +1,28 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 const statusLabels = { waiting: 'Waiting', called: 'Called', in_progress: 'In consultation', cancelled: 'Cancelled' };
 const actionLabels = { called: 'Call patient', in_progress: 'Start consultation', completed: 'Complete', cancelled: 'Cancel queue' };
+const staffProfileForm = document.querySelector('#staff-profile-form');
+const staffPicture = setupProfilePicturePicker(staffProfileForm.querySelector('.profile-picture-field'), staffProfileForm.elements.fullName);
+
+function renderStaffAvatar(name, picture) {
+  const avatar = document.querySelector('#staff-header-avatar');
+  avatar.replaceChildren();
+  if (picture) {
+    const image = document.createElement('img'); image.src = picture; image.alt = '';
+    image.onerror = () => { avatar.replaceChildren(); avatar.textContent = String(name || 'Staff').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase(); };
+    avatar.append(image);
+  } else avatar.textContent = String(name || 'Staff').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+}
+
+function formatClock(time) {
+  const [hour, minute] = String(time).slice(0, 5).split(':').map(Number);
+  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
+}
+function formatTimeRange(start) {
+  const [hour, minute] = String(start).slice(0, 5).split(':').map(Number);
+  const endMinutes = hour * 60 + minute + 30;
+  return `${formatClock(start)} – ${formatClock(`${String(Math.floor(endMinutes / 60) % 24).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`)}`;
+}
 
 async function staffApi(path, options = {}) {
   const response = await fetch(path, { credentials: 'same-origin', ...options });
@@ -7,7 +30,10 @@ async function staffApi(path, options = {}) {
     window.location.replace('/staff-login.html');
     throw new Error('Staff sign-in required.');
   }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) throw new Error(response.status === 413 ? 'The selected picture is too large.' : 'The server returned an invalid response. Restart the application server and try again.');
   const data = await response.json();
+  if (response.status === 428 && data.passwordChangeRequired) window.location.hash = '#profile';
   if (!response.ok) throw new Error(data.error || 'The staff request could not be completed.');
   return data;
 }
@@ -95,7 +121,8 @@ function servicePanel(service, entries) {
   panel.className = 'service-queue-panel';
   panel.innerHTML = '<header><div><span class="service-state"></span><h3></h3><p></p></div><button class="queue-toggle" type="button"></button></header><div class="service-queue-list"></div>';
   panel.querySelector('h3').textContent = service.name;
-  panel.querySelector('p').textContent = `${entries.filter(entry => entry.status !== 'cancelled').length} active patient${entries.filter(entry => entry.status !== 'cancelled').length === 1 ? '' : 's'}`;
+  const activeCount = entries.filter(entry => entry.status !== 'cancelled').length;
+  panel.querySelector('p').textContent = `${activeCount} active patient${activeCount === 1 ? '' : 's'}${service.queueCapacity ? ` · Capacity ${activeCount}/${service.queueCapacity}` : ''}`;
   const state = panel.querySelector('.service-state');
   state.textContent = service.isQueueOpen ? 'Queue open' : 'Queue closed';
   state.classList.toggle('closed', !service.isQueueOpen);
@@ -131,16 +158,14 @@ async function loadStaffDashboard() {
   }
 }
 
-document.querySelector('#refresh-button').addEventListener('click', () => { loadStaffDashboard(); loadStaffAppointments(); });
+document.querySelector('#refresh-button').addEventListener('click', loadStaffDashboard);
 document.querySelector('#logout-button').addEventListener('click', async () => {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
   window.location.replace('/');
 });
 
-loadStaffDashboard();
-
-
 let appointmentLoadVersion = 0;
+let appointmentPage = 1;
 let appointmentDecision = null;
 let slotLoadVersion = 0;
 const appointmentLabels = { pending: 'Pending', approved: 'Approved', reschedule_proposed: 'Awaiting patient response', rejected: 'Rejected', cancelled: 'Cancelled', completed: 'Completed' };
@@ -150,11 +175,14 @@ async function loadStaffAppointments() {
   const container = document.querySelector('#staff-appointments');
   container.textContent = 'Loading appointments…';
   try {
-    const filter = document.querySelector('#appointment-filter').value;
-    const data = await staffApi('/api/staff/appointments?status=' + encodeURIComponent(filter));
+    const filters = new FormData(document.querySelector('#appointment-filters'));
+    const data = await staffApi('/api/staff/appointments?' + new URLSearchParams({ status: filters.get('status'), search: filters.get('search'), from: filters.get('from'), to: filters.get('to'), page: appointmentPage }));
     if (version !== appointmentLoadVersion) return;
     container.replaceChildren(...data.appointments.map(staffAppointmentCard));
     if (!data.appointments.length) container.textContent = 'No appointments match this filter.';
+    document.querySelector('#appointment-page').textContent = `Page ${data.page}`;
+    document.querySelector('#appointment-previous').disabled = data.page <= 1;
+    document.querySelector('#appointment-next').disabled = !data.hasMore;
   } catch (error) { if (version === appointmentLoadVersion) container.textContent = error.message; }
 }
 
@@ -165,7 +193,7 @@ function staffAppointmentCard(item) {
   card.querySelector('h3').textContent = item.patientName + ' · ' + item.serviceName;
   card.querySelector('.staff-status').textContent = appointmentLabels[item.status];
   card.querySelector('.staff-status').dataset.status = item.status;
-  card.querySelector('.appointment-when').textContent = item.appointmentDate + ' at ' + item.appointmentTime + ' (Malaysia time)';
+  card.querySelector('.appointment-when').textContent = item.appointmentDate + ' · ' + formatTimeRange(item.appointmentTime) + ' (Malaysia time)';
   card.querySelector('.appointment-notes').textContent = 'Patient notes: ' + (item.notes || 'None');
   card.querySelector('.appointment-response').textContent = item.rejectionReason ? 'Clinic response: ' + item.rejectionReason : '';
   const actions = item.status === 'pending' ? ['approve', 'reject', 'reschedule'] : item.status === 'approved' ? ['complete', 'reject', 'reschedule'] : item.status === 'reschedule_proposed' ? ['reject', 'reschedule'] : [];
@@ -180,7 +208,7 @@ function staffAppointmentCard(item) {
       ++slotLoadVersion;
       document.querySelector('#staff-appointment-form').reset();
       document.querySelector('#appointment-dialog-title').textContent = labels[action];
-      document.querySelector('#appointment-dialog-description').textContent = item.patientName + ' · ' + item.appointmentDate + ' at ' + item.appointmentTime;
+      document.querySelector('#appointment-dialog-description').textContent = item.patientName + ' · ' + item.appointmentDate + ' · ' + formatTimeRange(item.appointmentTime);
       document.querySelector('#reschedule-fields').hidden = action !== 'reschedule';
       document.querySelector('#proposed-date').required = action === 'reschedule';
       document.querySelector('#proposed-time').required = action === 'reschedule';
@@ -207,10 +235,10 @@ document.querySelector('#proposed-date').addEventListener('change', async event 
   try {
     const data = await staffApi('/api/staff/appointments/availability?date=' + encodeURIComponent(event.target.value));
     if (version !== slotLoadVersion) return;
-    select.replaceChildren(new Option(data.slots.length ? 'Choose a time' : 'No available times', ''), ...data.slots.map(time => new Option(time, time)));
+    select.replaceChildren(new Option(data.slots.length ? 'Choose a time' : 'No available times', ''), ...data.slots.map(time => new Option(formatTimeRange(time), time)));
     select.disabled = !data.slots.length;
     submit.disabled = !data.slots.length;
-    document.querySelector('#appointment-dialog-error').textContent = '';
+    document.querySelector('#appointment-dialog-error').textContent = data.closureReason ? `Clinic closed: ${data.closureReason}` : '';
   } catch (error) { if (version === slotLoadVersion) document.querySelector('#appointment-dialog-error').textContent = error.message; }
 });
 
@@ -231,16 +259,178 @@ document.querySelector('#staff-appointment-form').addEventListener('submit', asy
   } catch (error) { document.querySelector('#appointment-dialog-error').textContent = error.message; }
   finally { submit.disabled = false; }
 });
-document.querySelector('#appointment-filter').addEventListener('change', loadStaffAppointments);
-function syncStaffNavigation() {
-  const hash = ['#overview', '#live-queue', '#appointments'].includes(window.location.hash) ? window.location.hash : '#overview';
+document.querySelector('#appointment-filters').addEventListener('submit', event => { event.preventDefault(); appointmentPage = 1; loadStaffAppointments(); });
+document.querySelector('#appointment-previous').addEventListener('click', () => { appointmentPage = Math.max(1, appointmentPage - 1); loadStaffAppointments(); });
+document.querySelector('#appointment-next').addEventListener('click', () => { appointmentPage += 1; loadStaffAppointments(); });
+
+let reportData = null;
+function reportMetric(label, value, note) {
+  const card = document.createElement('article');
+  card.innerHTML = '<span></span><strong></strong><small></small>';
+  card.querySelector('span').textContent = label;
+  card.querySelector('strong').textContent = value;
+  card.querySelector('small').textContent = note;
+  return card;
+}
+
+function renderDonutChart(items) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const chart = document.createElement('div');
+  chart.className = 'report-donut-layout';
+  const donut = document.createElement('div');
+  donut.className = 'report-donut';
+  let offset = 0;
+  const stops = items.map(item => {
+    const start = total ? offset / total * 100 : 0;
+    offset += item.value;
+    const end = total ? offset / total * 100 : 0;
+    return `${item.color} ${start}% ${end}%`;
+  });
+  donut.style.background = total ? `conic-gradient(${stops.join(',')})` : '#e8edf1';
+  donut.innerHTML = '<div><strong></strong><span>patients</span></div>';
+  donut.querySelector('strong').textContent = total;
+  const legend = document.createElement('div');
+  legend.className = 'report-legend';
+  items.forEach(item => {
+    const row = document.createElement('p');
+    row.innerHTML = '<i></i><span></span><strong></strong>';
+    row.querySelector('i').style.background = item.color;
+    row.querySelector('span').textContent = item.label;
+    row.querySelector('strong').textContent = `${item.value} (${total ? Math.round(item.value / total * 100) : 0}%)`;
+    legend.append(row);
+  });
+  chart.append(donut, legend);
+  return chart;
+}
+
+function renderServiceChart(services) {
+  const chart = document.createElement('div');
+  chart.className = 'report-bars';
+  const maximum = Math.max(1, ...services.map(service => Number(service.patientCount)));
+  services.forEach(service => {
+    const row = document.createElement('div');
+    row.innerHTML = '<div><span></span><strong></strong></div><div class="report-bar-track"><span></span></div>';
+    row.querySelector('span').textContent = service.serviceName;
+    row.querySelector('strong').textContent = service.patientCount;
+    row.querySelector('.report-bar-track span').style.width = `${Number(service.patientCount) / maximum * 100}%`;
+    chart.append(row);
+  });
+  if (!services.length) chart.textContent = 'No service activity in this period.';
+  return chart;
+}
+
+function downloadReport(format, metrics) {
+  if (format === 'pdf') {
+    document.body.classList.add('printing-report');
+    window.print();
+    document.body.classList.remove('printing-report');
+    return;
+  }
+  const escape = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  const rows = [['MediQ Staff Report'], ['From', reportData.from], ['To', reportData.to], [], ['Metric', 'Value'], ...metrics.map(item => [item[0], item[1]]),
+    [], ['Service', 'Patients', 'Completed', 'Completion rate'], ...reportData.services.map(item => [item.serviceName, item.patientCount, item.completed, `${item.patientCount ? Math.round(item.completed / item.patientCount * 100) : 0}%`])];
+  const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `mediq-report-${reportData.from}-to-${reportData.to}.csv`; link.click(); URL.revokeObjectURL(link.href);
+}
+
+document.querySelector('#report-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  const result = document.querySelector('#report-result');
+  result.textContent = 'Generating report…';
+  try {
+    reportData = await staffApi(`/api/staff/reports?from=${encodeURIComponent(values.from)}&to=${encodeURIComponent(values.to)}`);
+    const total = Number(reportData.summary.totalPatients) || 0;
+    const completed = Number(reportData.summary.completed) || 0;
+    const cancelled = Number(reportData.summary.cancelled) || 0;
+    const active = Math.max(0, total - completed - cancelled);
+    const completionRate = total ? Math.round(completed / total * 100) : 0;
+    const metrics = [
+      ['Total patients', total, 'All queue entries'], ['Completed', completed, `${completionRate}% completion rate`],
+      ['Average wait', reportData.summary.averageWaitMinutes == null ? '—' : `${reportData.summary.averageWaitMinutes} min`, 'Join to consultation'],
+      ['Average consultation', reportData.summary.averageConsultationMinutes == null ? '—' : `${reportData.summary.averageConsultationMinutes} min`, 'Consultation duration'],
+    ];
+    result.innerHTML = '<article class="report-document"><header class="report-title"><div><p class="staff-eyebrow">MediQ analytics</p><h3>Queue performance report</h3><span class="report-period"></span></div><div class="report-actions"><button id="print-report" class="staff-primary-button" type="button">Export PDF</button><button id="download-report" class="staff-secondary-button" type="button">Download CSV</button></div></header><div class="report-grid"></div><div class="report-chart-grid"><section><h4>Patient outcomes</h4><div id="outcome-chart"></div></section><section><h4>Patients by service</h4><div id="service-chart"></div></section></div><section class="report-table-section"><h4>Service performance</h4><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Service</th><th>Patients</th><th>Completed</th><th>Completion rate</th></tr></thead><tbody></tbody></table></div></section><aside class="report-insight"><strong>Report insight</strong><p></p></aside><footer class="report-footer"></footer></article>';
+    result.querySelector('.report-period').textContent = `${reportData.from} to ${reportData.to}`;
+    result.querySelector('.report-grid').replaceChildren(...metrics.map(item => reportMetric(...item)));
+    result.querySelector('#outcome-chart').append(renderDonutChart([{ label: 'Completed', value: completed, color: '#0b8879' }, { label: 'Cancelled', value: cancelled, color: '#d95d50' }, { label: 'Active / other', value: active, color: '#e3a13a' }]));
+    result.querySelector('#service-chart').append(renderServiceChart(reportData.services));
+    const body = result.querySelector('tbody');
+    reportData.services.forEach(service => { const row = body.insertRow(); [service.serviceName, service.patientCount, service.completed, `${service.patientCount ? Math.round(service.completed / service.patientCount * 100) : 0}%`].forEach(value => { row.insertCell().textContent = value; }); });
+    const busiest = reportData.services.find(service => Number(service.patientCount) > 0);
+    result.querySelector('.report-insight p').textContent = total ? `${busiest ? `${busiest.serviceName} handled the most patients (${busiest.patientCount}). ` : ''}${completionRate}% of patients completed their visit and ${cancelled} queue entr${cancelled === 1 ? 'y was' : 'ies were'} cancelled.` : 'No queue activity was recorded for the selected period.';
+    result.querySelector('.report-footer').textContent = `Generated ${new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())}`;
+    result.querySelector('#download-report').addEventListener('click', () => downloadReport('csv', metrics));
+    result.querySelector('#print-report').addEventListener('click', () => downloadReport('pdf', metrics));
+  } catch (error) { result.textContent = error.message; }
+});
+
+document.querySelectorAll('[data-report-days]').forEach(button => button.addEventListener('click', () => {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - Number(button.dataset.reportDays));
+  const localDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const form = document.querySelector('#report-form');
+  form.elements.from.value = localDate(from);
+  form.elements.to.value = localDate(to);
+  document.querySelectorAll('[data-report-days]').forEach(item => item.classList.toggle('active', item === button));
+}));
+document.querySelector('[data-report-days="6"]').click();
+
+async function loadStaffProfile() {
+  const { profile } = await staffApi('/api/staff/profile');
+  const form = document.querySelector('#staff-profile-form');
+  for (const key of ['staffCode', 'fullName', 'email', 'phone', 'profilePictureUrl']) form.elements[key].value = profile[key] || '';
+  staffPicture.setValue(profile.profilePictureUrl || '');
+  renderStaffAvatar(profile.fullName, profile.profilePictureUrl);
+}
+document.querySelector('#staff-profile-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const result = await staffApi('/api/staff/profile', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+    showAlert(result.message); document.querySelector('#staff-name').textContent = form.elements.fullName.value;
+    renderStaffAvatar(form.elements.fullName.value, form.elements.profilePictureUrl.value);
+  } catch (error) { showAlert(error.message, 'error'); }
+});
+document.querySelector('#staff-password-form').addEventListener('submit', async event => {
+  event.preventDefault(); const form = event.currentTarget;
+  if (form.elements.newPassword.value !== form.elements.confirmPassword.value) return showAlert('New passwords do not match.', 'error');
+  try { const result = await staffApi('/api/staff/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: form.elements.currentPassword.value, newPassword: form.elements.newPassword.value }) }); showAlert(result.message); form.reset(); document.querySelector('#password-change-note').textContent = 'Your password is up to date.'; }
+  catch (error) { showAlert(error.message, 'error'); }
+});
+async function showStaffPanel() {
+  const panels = ['overview', 'live-queue', 'appointments', 'reports', 'profile'];
+  const requestedPanel = window.location.hash.slice(1);
+  const activePanel = panels.includes(requestedPanel) ? requestedPanel : 'overview';
+  if (!panels.includes(requestedPanel)) history.replaceState(null, '', '#overview');
+
+  document.querySelectorAll('[data-staff-panel]').forEach(panel => {
+    panel.hidden = panel.dataset.staffPanel !== activePanel;
+  });
   document.querySelectorAll('.staff-nav a').forEach(item => {
-    const active = item.hash === hash;
+    const active = item.hash === `#${activePanel}`;
     item.classList.toggle('active', active);
     if (active) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current');
     if (active) item.scrollIntoView({ inline: 'center', block: 'nearest' });
   });
+
+  try {
+    if (activePanel === 'appointments') await loadStaffAppointments();
+    if (activePanel === 'profile') await loadStaffProfile();
+  } catch (error) {
+    showAlert(error.message, 'error');
+  }
 }
-window.addEventListener('hashchange', syncStaffNavigation);
-syncStaffNavigation();
-loadStaffAppointments();
+window.addEventListener('hashchange', showStaffPanel);
+loadStaffDashboard();
+loadStaffProfile().catch(error => showAlert(error.message, 'error'));
+showStaffPanel();
+setInterval(() => {
+  const panel = window.location.hash.slice(1) || 'overview';
+  if (!document.hidden && ['overview', 'live-queue'].includes(panel)) loadStaffDashboard();
+}, 30000);
+document.addEventListener('visibilitychange', () => {
+  const panel = window.location.hash.slice(1) || 'overview';
+  if (!document.hidden && ['overview', 'live-queue'].includes(panel)) loadStaffDashboard();
+});

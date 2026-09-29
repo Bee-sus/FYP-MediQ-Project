@@ -1,7 +1,9 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { requireRole } = require('../middleware/authentication');
-const { hashPassword, meetsPasswordRules } = require('../services/passwordService');
+const { hashPassword, generateTemporaryPassword } = require('../services/passwordService');
+const { validProfilePicture } = require('../services/profilePictureService');
+const { createVerificationToken, sendStaffWelcomeEmail } = require('../services/emailVerificationService');
 const { lockBookings, activeStatuses } = require('../services/appointmentService');
 const { validateHours, readHours, slotsForDate } = require('../services/clinicScheduleService');
 
@@ -43,7 +45,7 @@ router.get('/overview', async (request, response) => {
 
 router.get('/staff', async (request, response) => {
   try {
-    const [staff] = await pool.execute("SELECT id, full_name AS fullName, email, is_active AS isActive, created_at AS createdAt FROM users WHERE role = 'staff' ORDER BY full_name, id");
+    const [staff] = await pool.execute("SELECT id, staff_code AS staffCode, full_name AS fullName, email, phone_number AS phone, profile_picture_url AS profilePictureUrl, is_active AS isActive, created_at AS createdAt FROM users WHERE role = 'staff' ORDER BY full_name, id");
     return response.json({ staff });
   } catch (error) { return response.status(503).json({ error: 'Staff accounts are unavailable.' }); }
 });
@@ -51,16 +53,34 @@ router.get('/staff', async (request, response) => {
 router.post('/staff', async (request, response) => {
   const fullName = String(request.body.fullName || '').trim();
   const email = String(request.body.email || '').trim().toLowerCase();
-  const password = request.body.password;
+  const password = generateTemporaryPassword();
+  const phone = String(request.body.phone || '').trim();
+  const profilePictureUrl = String(request.body.profilePictureUrl || '').trim();
   if (fullName.length < 2 || fullName.length > 120 || !/^[\p{L}][\p{L} .'-]+$/u.test(fullName)
-      || email.length > 190 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !meetsPasswordRules(password)) {
-    return response.status(422).json({ error: 'Enter a valid staff name, email and a 12–128 character password with uppercase, lowercase, a number and a symbol.' });
+      || phone.length < 7 || phone.length > 30
+      || !validProfilePicture(profilePictureUrl)
+      || email.length > 190 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return response.status(422).json({ error: 'Enter a valid name, email, contact number and optional profile picture.' });
   }
   return transaction(response, async connection => {
     const passwordHash = await hashPassword(password);
-    const [result] = await connection.execute("INSERT INTO users (full_name, email, password_hash, role, is_active) VALUES (?, ?, ?, 'staff', TRUE)", [fullName, email, passwordHash]);
+    const [result] = await connection.execute("INSERT INTO users (staff_code, full_name, email, phone_number, profile_picture_url, password_hash, role, is_active, must_change_password) VALUES (NULL, ?, ?, ?, ?, ?, 'staff', TRUE, TRUE)", [fullName, email, phone, profilePictureUrl || null, passwordHash]);
+    const staffCode = `STF-${String(result.insertId).padStart(6, '0')}`;
+    await connection.execute("UPDATE users SET staff_code = ? WHERE id = ? AND role = 'staff'", [staffCode, result.insertId]);
+    const verificationToken = await createVerificationToken(connection, result.insertId);
+    let delivery;
+    try { delivery = await sendStaffWelcomeEmail({ email, fullName, staffCode, temporaryPassword: password, token: verificationToken }); }
+    catch (error) {
+      console.error('Staff welcome email failed:', error.code || error.message);
+      delivery = { sent: false, previewUrl: null, failed: true };
+    }
     await audit(connection, request.user.id, 'staff_created', 'staff', result.insertId, `Created staff account for ${fullName}.`);
-    return { status: 201, body: { message: 'Staff account created. The staff member can now sign in.', staffId: result.insertId } };
+    const message = delivery.sent
+      ? 'Staff account created and onboarding email sent.'
+      : delivery.failed
+        ? 'Staff account created, but the onboarding email failed to send. Check the SMTP settings and server log.'
+        : 'Staff account created. SMTP is not configured, so no email was sent.';
+    return { status: 201, body: { message, staffId: result.insertId, credentials: { staffCode, fullName, email, temporaryPassword: password, emailSent: Boolean(delivery.sent), emailFailed: Boolean(delivery.failed), verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl } } };
   });
 });
 
@@ -77,21 +97,72 @@ router.patch('/staff/:staffId', async (request, response) => {
   });
 });
 
+router.delete('/staff/:staffId', async (request, response) => {
+  const id = Number(request.params.staffId);
+  if (!validId(id)) return response.status(422).json({ error: 'Provide a valid staff account.' });
+  return transaction(response, async connection => {
+    const [rows] = await connection.execute("SELECT id, full_name AS fullName, staff_code AS staffCode FROM users WHERE id = ? AND role = 'staff' FOR UPDATE", [id]);
+    if (!rows.length) throw problem(404, 'Staff account not found.');
+    const staff = rows[0];
+    await connection.execute('DELETE FROM user_sessions WHERE user_id = ?', [id]);
+    await connection.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [id]);
+    await connection.execute('DELETE FROM staff_audit_logs WHERE staff_id = ?', [id]);
+    await audit(connection, request.user.id, 'staff_deleted', 'staff', id, `Permanently deleted Staff account ${staff.staffCode || id} (${staff.fullName}).`);
+    await connection.execute("DELETE FROM users WHERE id = ? AND role = 'staff'", [id]);
+    return { body: { message: `Staff account for ${staff.fullName} was permanently deleted.` } };
+  });
+});
+
 router.get('/services', async (request, response) => {
   try {
-    const [services] = await pool.execute('SELECT id, name, description, average_duration_minutes AS averageDurationMinutes, is_active AS isActive, is_queue_open AS isQueueOpen FROM clinic_services ORDER BY name');
+    const [services] = await pool.execute('SELECT id, name, description, doctor_name AS doctorName, service_details AS serviceDetails, average_duration_minutes AS averageDurationMinutes, queue_capacity AS queueCapacity, is_active AS isActive, is_queue_open AS isQueueOpen FROM clinic_services ORDER BY name');
     return response.json({ services });
   } catch (error) { return response.status(503).json({ error: 'Clinic services are unavailable.' }); }
+});
+
+router.get('/patients', async (request, response) => {
+  const query = String(request.query.query || '').trim().slice(0, 80); const page = Math.max(1, Number(request.query.page) || 1); const offset = (page - 1) * 20;
+  try {
+    const [patients] = await pool.execute(`SELECT id, full_name AS fullName, email, phone_number AS phone, created_at AS createdAt
+      FROM users WHERE role = 'patient' AND (? = '' OR full_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)
+      ORDER BY full_name LIMIT 21 OFFSET ${offset}`, [query, `%${query}%`, `%${query}%`, `%${query}%`]);
+    return response.json({ patients: patients.slice(0, 20), page, hasMore: patients.length > 20 });
+  } catch (error) { return response.status(503).json({ error: 'Patient records are unavailable.' }); }
+});
+
+router.get('/patients/:patientId', async (request, response) => {
+  const id = Number(request.params.patientId); if (!validId(id)) return response.status(422).json({ error: 'Invalid patient.' });
+  try {
+    const [patients] = await pool.execute("SELECT id, full_name AS fullName, email, phone_number AS phone, birth_date AS birthDate, gender, created_at AS createdAt FROM users WHERE id = ? AND role = 'patient'", [id]);
+    if (!patients.length) return response.status(404).json({ error: 'Patient not found.' });
+    const [queues] = await pool.execute('SELECT q.queue_date AS queueDate, q.status, s.name AS serviceName FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id WHERE q.patient_id = ? ORDER BY q.joined_at DESC LIMIT 20', [id]);
+    const [appointments] = await pool.execute('SELECT a.appointment_date AS appointmentDate, a.appointment_time AS appointmentTime, a.status, s.name AS serviceName FROM appointments a JOIN clinic_services s ON s.id = a.service_id WHERE a.patient_id = ? ORDER BY a.appointment_date DESC LIMIT 20', [id]);
+    return response.json({ patient: patients[0], queues, appointments });
+  } catch (error) { return response.status(503).json({ error: 'Patient history is unavailable.' }); }
+});
+
+router.get('/settings', async (request, response) => {
+  try { const [rows] = await pool.execute('SELECT clinic_name AS clinicName, address, phone, timezone FROM clinic_settings WHERE id = 1'); return response.json({ settings: rows[0] }); }
+  catch (error) { return response.status(503).json({ error: 'Clinic settings are unavailable.' }); }
+});
+router.put('/settings', async (request, response) => {
+  const clinicName = String(request.body.clinicName || '').trim(), address = String(request.body.address || '').trim(), phone = String(request.body.phone || '').trim();
+  if (clinicName.length < 2 || clinicName.length > 120 || address.length > 300 || phone.length > 30) return response.status(422).json({ error: 'Provide valid clinic details.' });
+  try { await pool.execute('UPDATE clinic_settings SET clinic_name = ?, address = ?, phone = ? WHERE id = 1', [clinicName, address || null, phone || null]); return response.json({ message: 'Clinic settings saved.' }); }
+  catch (error) { return response.status(503).json({ error: 'Clinic settings could not be saved.' }); }
 });
 
 async function saveService(request, response) {
   const id = request.params.serviceId == null ? null : Number(request.params.serviceId);
   const name = String(request.body.name || '').trim();
   const description = String(request.body.description || '').trim();
+  const doctorName = String(request.body.doctorName || '').trim();
+  const serviceDetails = String(request.body.serviceDetails || '').trim();
   const duration = Number(request.body.averageDurationMinutes);
+  const capacity = request.body.queueCapacity === '' || request.body.queueCapacity == null ? null : Number(request.body.queueCapacity);
   const isActive = request.body.isActive;
-  if ((id !== null && !validId(id)) || name.length < 2 || name.length > 120 || description.length > 1000 || !Number.isInteger(duration) || duration < 1 || duration > 240 || typeof isActive !== 'boolean') {
-    return response.status(422).json({ error: 'Provide a service name (2–120 characters), description (up to 1000 characters), duration (1–240 minutes) and active state.' });
+  if ((id !== null && !validId(id)) || name.length < 2 || name.length > 120 || description.length > 1000 || doctorName.length > 120 || serviceDetails.length > 500 || !Number.isInteger(duration) || duration < 1 || duration > 240 || (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 500)) || typeof isActive !== 'boolean') {
+    return response.status(422).json({ error: 'Provide valid service information, doctor name, duration and active state.' });
   }
   return transaction(response, async connection => {
     await lockBookings(connection);
@@ -104,9 +175,9 @@ async function saveService(request, response) {
         const [bookings] = await connection.execute(`SELECT id FROM appointments WHERE service_id = ? AND appointment_date >= DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')) AND status IN (${activeStatuses}) LIMIT 1`, [id]);
         if (queues.length || bookings.length) throw problem(409, 'Resolve this service’s active queues and upcoming appointments before deactivating it.');
       }
-      await connection.execute('UPDATE clinic_services SET name = ?, description = ?, average_duration_minutes = ?, is_active = ?, is_queue_open = IF(?, is_queue_open, FALSE) WHERE id = ?', [name, description, duration, isActive, isActive, id]);
+      await connection.execute('UPDATE clinic_services SET name = ?, description = ?, doctor_name = ?, service_details = ?, average_duration_minutes = ?, queue_capacity = ?, is_active = ?, is_queue_open = IF(?, is_queue_open, FALSE) WHERE id = ?', [name, description, doctorName || null, serviceDetails || null, duration, capacity, isActive, isActive, id]);
     } else {
-      const [result] = await connection.execute('INSERT INTO clinic_services (name, description, average_duration_minutes, is_active, is_queue_open) VALUES (?, ?, ?, ?, ?)', [name, description, duration, isActive, isActive]);
+      const [result] = await connection.execute('INSERT INTO clinic_services (name, description, doctor_name, service_details, average_duration_minutes, queue_capacity, is_active, is_queue_open) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [name, description, doctorName || null, serviceDetails || null, duration, capacity, isActive, isActive]);
       serviceId = result.insertId;
     }
     await audit(connection, request.user.id, id === null ? 'service_created' : 'service_updated', 'clinic_service', serviceId, `${name}; ${duration} minutes; ${isActive ? 'active' : 'inactive'}.`);
@@ -153,8 +224,44 @@ router.put('/hours', async (request, response) => {
   });
 });
 
+router.get('/closures', async (request, response) => {
+  try {
+    const [closures] = await pool.execute(`SELECT DATE_FORMAT(closure_date, '%Y-%m-%d') AS closureDate, reason, created_at AS createdAt
+      FROM clinic_closures WHERE closure_date >= CURRENT_DATE ORDER BY closure_date`);
+    return response.json({ closures });
+  } catch (error) { return response.status(503).json({ error: 'Clinic closure dates are unavailable. Apply the administrator database migration.' }); }
+});
+
+router.post('/closures', async (request, response) => {
+  const closureDate = String(request.body.closureDate || '');
+  const reason = String(request.body.reason || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(closureDate) || closureDate < new Date().toISOString().slice(0, 10)) return response.status(422).json({ error: 'Choose today or a future closure date.' });
+  if (reason.length < 3 || reason.length > 200) return response.status(422).json({ error: 'Provide a closure reason between 3 and 200 characters.' });
+  return transaction(response, async connection => {
+    await lockBookings(connection);
+    const [appointments] = await connection.execute(`SELECT id FROM appointments WHERE appointment_date = ? AND status IN (${activeStatuses}) LIMIT 1`, [closureDate]);
+    if (appointments.length) throw problem(409, 'This date has an active appointment. Resolve it before closing the clinic.');
+    await connection.execute('INSERT INTO clinic_closures (closure_date, reason, created_by) VALUES (?, ?, ?)', [closureDate, reason, request.user.id]);
+    await audit(connection, request.user.id, 'clinic_closure_added', 'clinic_closure', 1, `${closureDate}: ${reason}`);
+    return { status: 201, body: { message: 'Clinic closure added.' } };
+  });
+});
+
+router.delete('/closures/:date', async (request, response) => {
+  const closureDate = String(request.params.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(closureDate)) return response.status(422).json({ error: 'Invalid closure date.' });
+  return transaction(response, async connection => {
+    const [result] = await connection.execute('DELETE FROM clinic_closures WHERE closure_date = ?', [closureDate]);
+    if (!result.affectedRows) throw problem(404, 'Closure date not found.');
+    await audit(connection, request.user.id, 'clinic_closure_removed', 'clinic_closure', 1, closureDate);
+    return { body: { message: 'Clinic closure removed. Appointments can use the weekly schedule again.' } };
+  });
+});
+
 router.get('/audit', async (request, response) => {
   const page = Number(request.query.page || 1);
+  const role = ['Administrator', 'Staff'].includes(request.query.role) ? request.query.role : '';
+  const query = String(request.query.query || '').trim().slice(0, 80);
   if (!Number.isSafeInteger(page) || page < 1 || page > 100000) return response.status(422).json({ error: 'Invalid audit page.' });
   try {
     const [items] = await pool.execute(`SELECT * FROM (
@@ -163,7 +270,9 @@ router.get('/audit', async (request, response) => {
       UNION ALL
       SELECT s.id, 'Staff' AS actorRole, u.full_name AS actorName, s.action, s.entity_type AS entityType, s.entity_id AS entityId, s.details, s.created_at AS createdAt
       FROM staff_audit_logs s JOIN users u ON u.id = s.staff_id
-    ) activity ORDER BY createdAt DESC, actorRole, id DESC LIMIT 26 OFFSET ${(page - 1) * 25}`);
+    ) activity WHERE (? = '' OR actorRole = ?) AND (? = '' OR actorName LIKE ? OR action LIKE ? OR details LIKE ?)
+      ORDER BY createdAt DESC, actorRole, id DESC LIMIT 26 OFFSET ${(page - 1) * 25}`,
+    [role, role, query, `%${query}%`, `%${query}%`, `%${query}%`]);
     return response.json({ items: items.slice(0, 25), page, hasMore: items.length > 25 });
   } catch (error) { return response.status(503).json({ error: 'Activity records are unavailable.' }); }
 });

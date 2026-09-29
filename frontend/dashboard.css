@@ -1357,3 +1357,10 @@ padding:9px 0
 @media (max-width: 760px) {
   .overview-grid { grid-template-columns: 1fr; }
 }
+/* Patient portal theme: blue */
+.portal-body { --patient-accent: #2f63e9; --patient-accent-dark: #173f9e; --patient-soft: #eaf1ff; background: linear-gradient(135deg, #f6f9ff 0%, #eef4ff 100%); color: #102047; }
+.portal-body .portal-header { border-top: 4px solid var(--patient-accent); border-bottom-color: #d8e3f8; }
+.portal-body .portal-nav { background: #f8faff; }
+.portal-body .portal-nav a.active { color: var(--patient-accent-dark); background: var(--patient-soft); }
+.portal-body .brand span, .portal-body .eyebrow { color: var(--patient-accent); }
+.portal-body .dashboard-section, .portal-body .feature-form-card { box-shadow: 0 14px 35px rgba(47, 99, 233, .07); }

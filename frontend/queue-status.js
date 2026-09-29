@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 let activeQueue = null;
 const labels = { waiting: 'Waiting', called: 'Please proceed', in_progress: 'In consultation' };
 
@@ -24,7 +25,7 @@ function renderActiveQueue(queue) {
       <div class="status-summary">
         <span id="queue-status-badge" class="queue-status-badge"></span>
         <h2 id="queue-guidance"></h2>
-        <p id="joined-time"></p>
+        <p id="joined-time"></p><small id="queue-last-updated" class="queue-last-updated"></small>
         <div class="status-metrics"><div><strong id="people-ahead"></strong><span>People ahead</span></div><div><strong id="estimated-wait"></strong><span>Prototype estimate</span></div></div>
         <p class="estimate-explanation estimate-explanation-dark">Calculated from people ahead and average consultation duration—not a trained ML prediction.</p>
       </div>
@@ -44,6 +45,7 @@ function renderActiveQueue(queue) {
   document.querySelector('#joined-time').textContent = `Joined ${new Intl.DateTimeFormat('en-MY', { hour: 'numeric', minute: '2-digit' }).format(new Date(queue.joinedAt))}`;
   document.querySelector('#people-ahead').textContent = queue.peopleAhead;
   document.querySelector('#estimated-wait').textContent = queue.estimatedMinutes == null ? 'Calculating' : `~${Math.round(queue.estimatedMinutes)} min`;
+  document.querySelector('#queue-last-updated').textContent = `Automatically updated ${new Intl.DateTimeFormat('en-MY', { timeStyle: 'short' }).format(new Date())}`;
   const calledIcon = document.querySelector('[data-stage="called"] .progress-icon');
   const consultationIcon = document.querySelector('[data-stage="consultation"] .progress-icon');
   if (queue.status === 'called' || queue.status === 'in_progress') {
@@ -121,3 +123,5 @@ document.querySelector('#logout-button').addEventListener('click', async () => {
   window.location.replace('/');
 });
 loadQueueStatus();
+setInterval(() => { if (!document.hidden) loadQueueStatus(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQueueStatus(); });

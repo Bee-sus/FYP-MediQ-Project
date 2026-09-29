@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 let selectedService = null;
 
 function setDateText() {
@@ -37,8 +38,10 @@ function renderServices(services) {
     card.setAttribute('aria-checked', 'false');
     card.innerHTML = '<span class="service-radio" aria-hidden="true"></span><span class="service-option-copy"><strong></strong><small></small></span><span class="service-time"></span>';
     card.querySelector('strong').textContent = service.name;
-    card.querySelector('small').textContent = service.description || 'Clinic consultation service.';
+    card.querySelector('small').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
     card.querySelector('.service-time').textContent = `~${service.averageDurationMinutes} min`;
+    const full = service.queueCapacity && Number(service.activePatients) >= Number(service.queueCapacity);
+    if (full) { card.disabled = true; card.querySelector('.service-time').textContent = 'Queue full'; }
     card.addEventListener('click', () => selectService(service, card));
     if (service.id === requestedId) queueMicrotask(() => selectService(service, card));
     return card;

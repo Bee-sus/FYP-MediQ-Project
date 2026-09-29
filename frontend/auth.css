@@ -99,3 +99,22 @@ body {
   .form-row { grid-template-columns: 1fr; }
   .form-options { align-items: flex-start; flex-direction: column; }
 }
+.resend-verification { width: 100%; margin-top: 10px; padding: 10px; border: 0; background: transparent; color: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+.resend-verification:hover { text-decoration: underline; }
+.form-status a { color: inherit; font-weight: 800; }
+
+.verify-body { min-height: 100vh; display: grid; place-items: center; padding: 28px 18px; background: linear-gradient(145deg, #f6f9ff 0%, #eef4ff 55%, #f8fbff 100%); }
+.verify-page { width: min(100%, 620px); margin: 0; }
+.verify-card { padding: clamp(30px, 6vw, 58px); border: 1px solid #dce5f2; border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 24px 70px rgba(20,33,61,.13); text-align: center; }
+.verify-brand { display: inline-flex; align-items: center; justify-content: center; margin-bottom: 34px; color: var(--ink); font-size: 28px; font-weight: 800; letter-spacing: -.04em; text-decoration: none; }
+.verify-brand span { color: var(--blue); }
+.verification-icon { width: 66px; height: 66px; display: grid; place-items: center; margin: 0 auto 22px; border-radius: 50%; color: #2563eb; background: #eaf1ff; font-size: 30px; font-weight: 800; }
+.verify-card[data-state="success"] .verification-icon { color: var(--green); background: #eaf8f2; }
+.verify-card[data-state="error"] .verification-icon { color: var(--danger); background: #fff0ee; }
+.verify-card .eyebrow { margin-bottom: 10px; }
+.verify-card h1 { max-width: none; margin: 0; font-size: clamp(36px, 7vw, 56px); line-height: 1.04; letter-spacing: -.055em; }
+.verify-description { max-width: 470px; margin: 16px auto 22px; color: var(--muted); font-size: 15px; line-height: 1.65; }
+.verify-card .form-status { text-align: left; }
+.verify-action { display: grid; place-items: center; margin-top: 16px; text-decoration: none; }
+.verify-home-link { display: inline-block; margin-top: 22px; color: var(--blue-dark); font-size: 13px; font-weight: 700; text-decoration: none; }
+.verify-home-link:hover { text-decoration: underline; }

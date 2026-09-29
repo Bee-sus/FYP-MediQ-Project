@@ -42,7 +42,13 @@ async function readHours(connection) {
 }
 
 async function slotIsOpen(connection, date, time) {
-  return slotsForDate(await readHours(connection), date).includes(time);
+  const [closures] = await connection.execute('SELECT closure_date FROM clinic_closures WHERE closure_date = ? LIMIT 1', [date]);
+  return !closures.length && slotsForDate(await readHours(connection), date).includes(time);
 }
 
-module.exports = { validTime, validateHours, slotsForDay, slotsForDate, readHours, slotIsOpen };
+async function availableSlotsForDate(connection, date) {
+  const [closures] = await connection.execute('SELECT reason FROM clinic_closures WHERE closure_date = ? LIMIT 1', [date]);
+  return { slots: closures.length ? [] : slotsForDate(await readHours(connection), date), closureReason: closures[0]?.reason || null };
+}
+
+module.exports = { validTime, validateHours, slotsForDay, slotsForDate, readHours, slotIsOpen, availableSlotsForDate };

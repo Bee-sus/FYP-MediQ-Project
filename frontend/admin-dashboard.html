@@ -20,6 +20,8 @@
         <a href="#staff">Staff accounts</a>
         <a href="#services">Clinic services</a>
         <a href="#hours">Operating hours</a>
+        <a href="#patients">Patients</a>
+        <a href="#settings">Clinic settings</a>
         <a href="#activity">Activity log</a>
       </nav>
       <main class="staff-main">
@@ -37,9 +39,10 @@
               <h3>Create staff account</h3>
               <label>Full name<input name="fullName" autocomplete="name" minlength="2" maxlength="120" required /></label>
               <label>Email address<input name="email" type="email" autocomplete="off" maxlength="190" required /></label>
-              <label>Password<input id="staff-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="staff-password-help" required /></label>
-              <button id="toggle-password" type="button" class="staff-secondary-button" aria-controls="staff-password" aria-pressed="false">Show password</button>
-              <p id="staff-password-help">Use 12–128 characters with uppercase, lowercase, a number and a symbol. Share the credentials with the staff member privately.</p>
+              <label>Contact number<input name="phone" type="tel" minlength="7" maxlength="30" required /></label>
+              <div class="profile-picture-field"><span class="profile-picture-preview" aria-hidden="true"></span><div><label>Profile picture <small>Optional</small><input type="file" accept="image/jpeg,image/png,image/webp" /></label><input name="profilePictureUrl" type="hidden" /><button class="remove-profile-picture staff-secondary-button" type="button" hidden>Remove picture</button><small class="profile-picture-status" aria-live="polite">JPEG, PNG or WebP. Maximum 5 MB.</small></div></div>
+              <label>Generated temporary password<input id="generated-staff-password" type="text" readonly placeholder="Generated after account creation" aria-describedby="staff-password-help" /></label>
+              <p id="staff-password-help">A secure temporary password will be generated automatically and shown once after the account is created. The Staff member must change it after signing in.</p>
               <button type="submit" class="staff-primary-button">Create account</button>
             </form>
             <div id="staff-list" class="admin-list" aria-live="polite"></div>
@@ -55,25 +58,38 @@
           <p id="schedule-note"></p>
           <p>Leave both break times empty for uninterrupted hours. Existing appointments must fit the new schedule before it can be saved. One patient can reserve each time slot across the clinic.</p>
           <form id="hours-form"><div id="hours-days" class="hours-days"></div><button id="save-hours" type="submit" class="staff-primary-button" disabled>Save weekly hours</button></form>
+          <div class="closure-manager">
+            <div class="staff-section-heading"><div><h3>Special closure dates</h3><p>Close the clinic for public holidays or one-off events.</p></div></div>
+            <form id="closure-form" class="closure-form"><label>Closure date<input name="closureDate" type="date" required /></label><label>Reason<input name="reason" minlength="3" maxlength="200" placeholder="e.g. Public holiday" required /></label><button class="staff-primary-button" type="submit">Add closure</button></form>
+            <div id="closure-list" class="admin-list" aria-live="polite"></div>
+          </div>
         </section>
         <section data-panel="activity" aria-labelledby="activity-heading" hidden>
           <div class="staff-section-heading"><div><h2 id="activity-heading">Activity log</h2><p>Administrator changes and Staff queue and appointment actions.</p></div><button id="refresh-audit" class="staff-secondary-button" type="button">Refresh</button></div>
+          <form id="audit-filter-form" class="audit-filters"><label>Actor<select name="role"><option value="">All roles</option><option value="Administrator">Administrator</option><option value="Staff">Staff</option></select></label><label>Search activity<input name="query" maxlength="80" placeholder="Name, action or details" /></label><button class="staff-secondary-button" type="submit">Apply filters</button></form>
           <div id="audit-list" class="admin-list" aria-live="polite"></div>
           <div class="admin-pagination"><button id="audit-previous" class="staff-secondary-button" type="button">Previous</button><span id="audit-page"></span><button id="audit-next" class="staff-secondary-button" type="button">Next</button></div>
         </section>
+        <section data-panel="patients" aria-labelledby="patients-heading" hidden><div class="staff-section-heading"><div><h2 id="patients-heading">Patient records</h2><p>Search contact details and review queue or appointment history.</p></div></div><form id="patient-search-form" class="audit-filters"><label>Search patients<input name="query" placeholder="Name, email or contact" /></label><button class="staff-secondary-button" type="submit">Search</button></form><div id="patient-list" class="admin-list"></div><div id="patient-details"></div></section>
+        <section data-panel="settings" aria-labelledby="settings-heading" hidden><div class="staff-section-heading"><div><h2 id="settings-heading">Clinic settings</h2><p>Update the clinic identity and contact information displayed by the system.</p></div></div><form id="settings-form" class="admin-card settings-form"><label>Clinic name<input name="clinicName" minlength="2" maxlength="120" required /></label><label>Address<textarea name="address" maxlength="300" rows="3"></textarea></label><label>Contact number<input name="phone" maxlength="30" /></label><label>Timezone<input name="timezone" value="Asia/Kuala_Lumpur" readonly /></label><button class="staff-primary-button" type="submit">Save settings</button></form></section>
       </main>
     </div>
     <dialog id="service-dialog" class="staff-dialog" aria-labelledby="service-dialog-title">
       <form id="service-form">
         <h2 id="service-dialog-title">Clinic service</h2>
         <label>Service name<input name="name" minlength="2" maxlength="120" required /></label>
+        <label>Doctor name<input name="doctorName" maxlength="120" placeholder="Doctor assigned to this service" /></label>
+        <label>Service provided<textarea name="serviceDetails" maxlength="500" rows="2" placeholder="Describe what the doctor provides."></textarea></label>
         <label>Description<textarea name="description" maxlength="1000" rows="3"></textarea></label>
         <label>Average consultation duration (minutes)<input name="averageDurationMinutes" type="number" min="1" max="240" step="1" required /></label>
+        <label>Daily queue capacity <small>Optional</small><input name="queueCapacity" type="number" min="1" max="500" placeholder="No limit" /></label>
         <label class="admin-checkbox"><input name="isActive" type="checkbox" /> Active service</label>
         <p id="service-error" role="alert"></p>
         <div><button id="close-service" type="button" class="staff-secondary-button">Go back</button><button type="submit" class="staff-primary-button">Save service</button></div>
       </form>
     </dialog>
+    <dialog id="credentials-dialog" class="staff-dialog" aria-labelledby="credentials-title"><div class="credential-sheet"><h2 id="credentials-title">Staff login credentials</h2><p id="credential-email-status">These credentials are shown once. The staff member must verify their email and change the temporary password.</p><dl><dt>Staff ID</dt><dd id="credential-id"></dd><dt>Name</dt><dd id="credential-name"></dd><dt>Email</dt><dd id="credential-email"></dd><dt>Temporary password</dt><dd id="credential-password"></dd><dt id="verification-link-label" hidden>Local verification link</dt><dd id="credential-verification" hidden></dd></dl><div><button id="email-credentials" class="staff-primary-button" type="button">Open email draft</button><button id="close-credentials" class="staff-secondary-button" type="button">Close</button></div></div></dialog>
+    <script src="profile-picture.js"></script>
     <script src="admin-dashboard.js"></script>
   </body>
 </html>

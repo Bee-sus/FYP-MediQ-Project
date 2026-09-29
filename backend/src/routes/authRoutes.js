@@ -3,6 +3,7 @@ const express = require('express');
 const { pool } = require('../config/database');
 const { hashPassword, verifyPassword, meetsPasswordRules } = require('../services/passwordService');
 const { authenticate, tokenHash } = require('../middleware/authentication');
+const { createVerificationToken, sendVerificationEmail, hashToken } = require('../services/emailVerificationService');
 
 const router = express.Router();
 const roles = new Set(['patient', 'staff', 'admin']);
@@ -44,7 +45,11 @@ router.post('/register', async (request, response) => {
        VALUES (?, ?, ?, ?, ?, ?, 'patient')`,
       [values.name, values.email, passwordHash, values.phone, values.birthDate, values.gender],
     );
-    return response.status(201).json({ message: 'Patient account created. You can now sign in.', userId: result.insertId });
+    const token = await createVerificationToken(pool, result.insertId);
+    let delivery;
+    try { delivery = await sendVerificationEmail({ email: values.email, fullName: values.name, token }); }
+    catch (error) { delivery = { sent: false, previewUrl: null }; }
+    return response.status(201).json({ message: delivery.sent ? 'Account created. Check your email to verify your address.' : 'Account created. Email delivery is not configured; use the development verification link.', userId: result.insertId, requiresVerification: true, verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') return response.status(409).json({ error: 'An account already uses this email address.', fields: { email: 'Email address is already registered.' } });
     return response.status(503).json({ error: 'Registration is unavailable. Check the database connection and try again.' });
@@ -56,21 +61,48 @@ router.post('/login', async (request, response) => {
   const role = String(request.body.role || '');
   if (!email || !request.body.password || !roles.has(role)) return response.status(400).json({ error: 'Email, password and a valid access role are required.' });
   try {
-    const [rows] = await pool.execute('SELECT id, full_name, email, password_hash, role, is_active FROM users WHERE email = ? LIMIT 1', [email]);
+    const [rows] = await pool.execute('SELECT id, full_name, email, password_hash, role, is_active, must_change_password, email_verified_at FROM users WHERE email = ? LIMIT 1', [email]);
     const user = rows[0];
     if (!user || !user.is_active || user.role !== role || !(await verifyPassword(request.body.password, user.password_hash))) {
       return response.status(401).json({ error: 'The sign-in details are incorrect for this portal.' });
     }
+    if (user.role !== 'admin' && user.email_verified_at === null) return response.status(403).json({ error: 'Verify your email address before signing in.', emailVerificationRequired: true });
     const token = crypto.randomBytes(32).toString('base64url');
     const maxAge = setSessionCookie(response, token, Boolean(request.body.remember));
     await pool.execute('INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))', [user.id, tokenHash(token), maxAge]);
     const redirect = user.role === 'patient'
       ? '/patient-dashboard.html'
-      : user.role === 'staff' ? '/staff-dashboard.html' : '/admin-dashboard.html';
-    return response.json({ message: 'Signed in successfully.', user: { id: user.id, fullName: user.full_name, email: user.email, role: user.role }, redirect });
+      : user.role === 'staff' ? `/staff-dashboard.html${user.must_change_password ? '#profile' : ''}` : '/admin-dashboard.html';
+    return response.json({ message: 'Signed in successfully.', user: { id: user.id, fullName: user.full_name, email: user.email, role: user.role, mustChangePassword: Boolean(user.must_change_password) }, redirect });
   } catch (error) {
     return response.status(503).json({ error: 'Sign-in is unavailable. Check the database connection and try again.' });
   }
+});
+
+router.post('/verify-email', async (request, response) => {
+  const token = String(request.body.token || '');
+  if (token.length < 20) return response.status(422).json({ error: 'This verification link is invalid.' });
+  let connection;
+  try {
+    connection = await pool.getConnection(); await connection.beginTransaction();
+    const [rows] = await connection.execute('SELECT t.user_id AS userId, u.role FROM email_verification_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ? AND t.expires_at > NOW() FOR UPDATE', [hashToken(token)]);
+    if (!rows.length) { await connection.rollback(); return response.status(410).json({ error: 'This verification link is invalid or has expired.' }); }
+    await connection.execute('UPDATE users SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP) WHERE id = ?', [rows[0].userId]);
+    await connection.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [rows[0].userId]);
+    await connection.commit(); return response.json({ message: 'Email verified successfully. You can now sign in.', role: rows[0].role });
+  } catch (error) { if (connection) await connection.rollback(); return response.status(503).json({ error: 'Email verification is temporarily unavailable.' }); }
+  finally { if (connection) connection.release(); }
+});
+
+router.post('/resend-verification', async (request, response) => {
+  const email = String(request.body.email || '').trim().toLowerCase(); const role = String(request.body.role || 'patient');
+  try {
+    const [rows] = await pool.execute('SELECT id, full_name AS fullName, email, email_verified_at AS verifiedAt FROM users WHERE email = ? AND role = ? AND is_active = TRUE LIMIT 1', [email, role]);
+    if (!rows.length || rows[0].verifiedAt) return response.json({ message: 'If an unverified account exists, a new verification email has been prepared.' });
+    const token = await createVerificationToken(pool, rows[0].id); let delivery;
+    try { delivery = await sendVerificationEmail({ email, fullName: rows[0].fullName, token }); } catch (error) { delivery = { sent: false, previewUrl: null }; }
+    return response.json({ message: delivery.sent ? 'Verification email sent.' : 'Email delivery is not configured; use the development verification link.', verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
+  } catch (error) { return response.status(503).json({ error: 'Verification email could not be resent.' }); }
 });
 
 router.get('/me', authenticate, (request, response) => response.json({ user: request.user }));

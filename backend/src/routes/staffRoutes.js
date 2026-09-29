@@ -1,6 +1,8 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { requireRole } = require('../middleware/authentication');
+const { validProfilePicture } = require('../services/profilePictureService');
+const { hashPassword, verifyPassword, meetsPasswordRules } = require('../services/passwordService');
 
 const router = express.Router();
 
@@ -52,7 +54,7 @@ router.get('/overview', ...requireRole('staff'), async (request, response) => {
 router.get('/queues', ...requireRole('staff'), async (request, response) => {
   try {
     const [services] = await pool.execute(
-      `SELECT id, name, is_active AS isActive, is_queue_open AS isQueueOpen
+      `SELECT id, name, queue_capacity AS queueCapacity, is_active AS isActive, is_queue_open AS isQueueOpen
        FROM clinic_services WHERE is_active = TRUE ORDER BY name`,
     );
     const [entries] = await pool.execute(
@@ -147,6 +149,11 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
     } else {
       await connection.execute(`UPDATE queue_entries SET status = ?${timestamps} WHERE id = ?`, [nextStatus, queueId]);
     }
+    if (nextStatus === 'in_progress') await connection.execute(
+      `UPDATE waiting_time_predictions p JOIN queue_entries q ON q.id = p.queue_entry_id
+       SET p.actual_wait_minutes = TIMESTAMPDIFF(MINUTE, q.joined_at, CURRENT_TIMESTAMP)
+       WHERE p.queue_entry_id = ?`, [queueId],
+    );
     const notice = transitionDetails[nextStatus];
     await connection.execute(
       `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
@@ -166,6 +173,60 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
   } finally {
     if (connection) connection.release();
   }
+});
+
+router.get('/profile', ...requireRole('staff'), async (request, response) => {
+  try {
+    const [rows] = await pool.execute(`SELECT staff_code AS staffCode, full_name AS fullName, email,
+      phone_number AS phone, profile_picture_url AS profilePictureUrl
+      FROM users WHERE id = ? AND role = 'staff' LIMIT 1`, [request.user.id]);
+    return response.json({ profile: rows[0] });
+  } catch (error) { return response.status(503).json({ error: 'Staff profile is unavailable.' }); }
+});
+
+router.patch('/profile', ...requireRole('staff'), async (request, response) => {
+  const fullName = String(request.body.fullName || '').trim();
+  const phone = String(request.body.phone || '').trim();
+  const profilePictureUrl = String(request.body.profilePictureUrl || '').trim();
+  if (fullName.length < 2 || fullName.length > 120 || phone.length < 7 || phone.length > 30
+      || !validProfilePicture(profilePictureUrl)) {
+    return response.status(422).json({ error: 'Enter a valid name, contact number and optional picture URL.' });
+  }
+  try {
+    await pool.execute(`UPDATE users SET full_name = ?, phone_number = ?, profile_picture_url = ?
+      WHERE id = ? AND role = 'staff'`, [fullName, phone, profilePictureUrl || null, request.user.id]);
+    return response.json({ message: 'Staff profile updated.' });
+  } catch (error) { return response.status(503).json({ error: 'Staff profile could not be updated.' }); }
+});
+
+router.patch('/password', ...requireRole('staff'), async (request, response) => {
+  const currentPassword = String(request.body.currentPassword || ''); const newPassword = String(request.body.newPassword || '');
+  if (!meetsPasswordRules(newPassword) || currentPassword === newPassword) return response.status(422).json({ error: 'Use a different strong password with at least 12 characters.' });
+  try {
+    const [rows] = await pool.execute("SELECT password_hash AS passwordHash FROM users WHERE id = ? AND role = 'staff'", [request.user.id]);
+    if (!rows.length || !(await verifyPassword(currentPassword, rows[0].passwordHash))) return response.status(401).json({ error: 'Current password is incorrect.' });
+    await pool.execute("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ? AND role = 'staff'", [await hashPassword(newPassword), request.user.id]);
+    return response.json({ message: 'Password changed successfully.' });
+  } catch (error) { return response.status(503).json({ error: 'Password could not be changed.' }); }
+});
+
+router.get('/reports', ...requireRole('staff'), async (request, response) => {
+  const from = String(request.query.from || '');
+  const to = String(request.query.to || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return response.status(422).json({ error: 'Choose a valid report start and end date.' });
+  }
+  try {
+    const [summary] = await pool.execute(`SELECT COUNT(*) AS totalPatients,
+      SUM(q.status = 'completed') AS completed, SUM(q.status = 'cancelled') AS cancelled,
+      ROUND(AVG(CASE WHEN q.consultation_started_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, q.joined_at, q.consultation_started_at) END), 1) AS averageWaitMinutes,
+      ROUND(AVG(CASE WHEN q.completed_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, q.consultation_started_at, q.completed_at) END), 1) AS averageConsultationMinutes
+      FROM queue_entries q WHERE q.queue_date BETWEEN ? AND ?`, [from, to]);
+    const [services] = await pool.execute(`SELECT s.name AS serviceName, COUNT(q.id) AS patientCount,
+      SUM(q.status = 'completed') AS completed FROM clinic_services s LEFT JOIN queue_entries q
+      ON q.service_id = s.id AND q.queue_date BETWEEN ? AND ? GROUP BY s.id, s.name ORDER BY patientCount DESC, s.name`, [from, to]);
+    return response.json({ from, to, summary: summary[0], services });
+  } catch (error) { return response.status(503).json({ error: 'The staff report could not be generated.' }); }
 });
 
 module.exports = router;

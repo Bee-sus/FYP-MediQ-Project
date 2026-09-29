@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS clinic_hours (
 ) ENGINE=InnoDB;
 INSERT IGNORE INTO clinic_hours (day_of_week) VALUES (0),(1),(2),(3),(4),(5),(6);
 
+CREATE TABLE IF NOT EXISTS clinic_closures (
+  closure_date DATE PRIMARY KEY,
+  reason VARCHAR(200) NOT NULL,
+  created_by BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_closure_admin FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS admin_audit_logs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   admin_id BIGINT UNSIGNED NOT NULL,

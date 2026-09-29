@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 const page = document.body.dataset.patientPage;
 const pageDetails = {
   services: ['Clinic services', 'Choose how the clinic can help with your visit.'],
@@ -93,7 +94,7 @@ function createServiceCard(service) {
     </div>
   `;
   card.querySelector('h2').textContent = service.name;
-  card.querySelector('p').textContent = service.description || 'Clinic consultation service.';
+  card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
   card.querySelector('.service-duration-pill').textContent = `Approx. ${service.averageDurationMinutes} min`;
   card.querySelector('.secondary-card-action').href = `/appointments.html?service=${service.id}`;
   card.querySelector('.primary-card-action').href = `/join-queue.html?service=${service.id}`;
@@ -165,7 +166,7 @@ function appointmentCard(item) {
   const status = card.querySelector('.record-status');
   status.textContent = item.status === 'reschedule_proposed' ? 'Awaiting your response' : item.status;
   status.dataset.status = item.status;
-  card.querySelector('.appointment-time').textContent = `Appointment time: ${item.appointmentTime} (Malaysia time)`;
+  card.querySelector('.appointment-time').textContent = `Appointment time: ${formatTimeRange(item.appointmentTime)} (Malaysia time)`;
   card.querySelector('.appointment-notes').textContent = item.notes || 'No additional notes.';
   if (item.rejectionReason) {
     const reason = card.querySelector('.rejection-reason');
@@ -224,7 +225,7 @@ async function loadAppointmentsPage() {
         <label>Additional notes <small>Optional</small><textarea name="notes" maxlength="500" rows="4" placeholder="Briefly describe anything the clinic should know."></textarea></label>
         <button class="feature-submit" type="submit">Submit appointment request</button><p id="appointment-status" class="inline-status" role="status" hidden></p>
       </form></section>
-      <section><div class="list-heading"><div><p class="eyebrow">Your requests</p><h2>Appointment activity</h2></div><span>${appointmentData.appointments.length} total</span></div><div id="appointment-list" class="appointment-list"></div></section>
+      <section><div class="list-heading"><div><p class="eyebrow">Your requests</p><h2>Appointment activity</h2></div><label class="activity-filter">Filter<select id="patient-appointment-filter"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="reschedule_proposed">Awaiting response</option><option value="completed">Completed</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select></label></div><p id="appointment-count" class="activity-count"></p><div id="appointment-list" class="appointment-list"></div></section>
     </div>
   `;
   const select = document.querySelector('[name="serviceId"]');
@@ -245,14 +246,21 @@ async function loadAppointmentsPage() {
     try {
       const data = await api('/api/patient/appointments/availability?date=' + encodeURIComponent(dateInput.value));
       if (current !== version) return;
-      timeSelect.replaceChildren(new Option(data.slots.length ? 'Select a time slot' : 'No available times', ''), ...data.slots.map(time => new Option(time, time)));
+      timeSelect.replaceChildren(new Option(data.slots.length ? 'Select a time slot' : data.closureReason ? `Clinic closed: ${data.closureReason}` : 'No available times', ''), ...data.slots.map(time => new Option(formatTimeRange(time), time)));
       timeSelect.disabled = !data.slots.length;
       submit.disabled = !data.slots.length;
     } catch (error) { if (current === version) showAlert(error.message, 'error'); }
   });
   const list = document.querySelector('#appointment-list');
-  if (appointmentData.appointments.length) list.replaceChildren(...appointmentData.appointments.map(appointmentCard));
-  else list.innerHTML = '<div class="feature-empty"><strong>No appointment requests</strong><p>Your requests and clinic decisions will appear here.</p></div>';
+  const renderAppointments = () => {
+    const filter = document.querySelector('#patient-appointment-filter').value;
+    const items = filter ? appointmentData.appointments.filter(item => item.status === filter) : appointmentData.appointments;
+    document.querySelector('#appointment-count').textContent = `${items.length} of ${appointmentData.appointments.length} appointment${appointmentData.appointments.length === 1 ? '' : 's'}`;
+    if (items.length) list.replaceChildren(...items.map(appointmentCard));
+    else list.innerHTML = '<div class="feature-empty"><strong>No matching appointments</strong><p>Choose another status to review your appointment activity.</p></div>';
+  };
+  document.querySelector('#patient-appointment-filter').addEventListener('change', renderAppointments);
+  renderAppointments();
   document.querySelector('#appointment-form').addEventListener('submit', submitAppointment);
 }
 
@@ -290,8 +298,22 @@ function notificationCard(item) {
       card.classList.remove('unread');
       card.querySelector('i').textContent = '';
     }
+    window.location.assign(item.type === 'appointment' ? '/appointments.html' : item.type === 'queue' ? '/queue-status.html' : '/patient-dashboard.html');
   });
   return card;
+}
+
+function formatClock(time) {
+  const [hour, minute] = String(time).slice(0, 5).split(':').map(Number);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
+function formatTimeRange(start) {
+  const [hour, minute] = String(start).slice(0, 5).split(':').map(Number);
+  const endMinutes = hour * 60 + minute + 30;
+  const end = `${String(Math.floor(endMinutes / 60) % 24).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
+  return `${formatClock(start)} – ${formatClock(end)}`;
 }
 
 async function loadNotificationsPage() {

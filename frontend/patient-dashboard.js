@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 const statusLabels = {
   waiting: 'Waiting',
   called: 'Called',
@@ -67,7 +68,7 @@ function renderServices(services) {
       </div>
     `;
     card.querySelector('h3').textContent = service.name;
-    card.querySelector('p').textContent = service.description || 'Clinic consultation service.';
+    card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
     card.querySelector('span').textContent = `Approx. ${service.averageDurationMinutes} min`;
     card.querySelector('a').href = `/join-queue.html?service=${service.id}`;
     card.querySelector('a').textContent = 'Select service';
@@ -178,3 +179,5 @@ async function loadPatientDashboard() {
 document.querySelector('#logout-button').addEventListener('click', logout);
 document.querySelector('.portal-nav .active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 loadPatientDashboard();
+setInterval(() => { if (!document.hidden) loadPatientDashboard(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadPatientDashboard(); });

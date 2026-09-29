@@ -16,7 +16,7 @@ async function authenticate(request, response, next) {
   if (!token) return response.status(401).json({ error: 'Sign in is required.' });
   try {
     const [rows] = await pool.execute(
-      `SELECT u.id, u.full_name AS fullName, u.email, u.role
+      `SELECT u.id, u.full_name AS fullName, u.email, u.role, u.must_change_password AS mustChangePassword
        FROM user_sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = TRUE LIMIT 1`,
       [tokenHash(token)],
@@ -31,9 +31,13 @@ async function authenticate(request, response, next) {
 }
 
 function requireRole(...roles) {
-  return [authenticate, (request, response, next) => (
-    roles.includes(request.user.role) ? next() : response.status(403).json({ error: 'You do not have access to this area.' })
-  )];
+  return [authenticate, (request, response, next) => {
+    if (!roles.includes(request.user.role)) return response.status(403).json({ error: 'You do not have access to this area.' });
+    if (request.user.role === 'staff' && request.user.mustChangePassword && !['/profile', '/password'].includes(request.path)) {
+      return response.status(428).json({ error: 'Change your temporary password before using Staff features.', passwordChangeRequired: true });
+    }
+    return next();
+  }];
 }
 
 module.exports = { authenticate, requireRole, tokenHash };

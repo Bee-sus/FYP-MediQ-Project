@@ -4,6 +4,7 @@ let scheduleDirty = false;
 let editingServiceId = null;
 let auditPage = 1;
 const loaded = new Set();
+const adminPicture = setupProfilePicturePicker($('#create-staff-form .profile-picture-field'), $('#create-staff-form [name="fullName"]'));
 
 async function adminApi(path, options = {}) {
   const response = await fetch('/api/admin' + path, { credentials: 'same-origin', ...options });
@@ -11,6 +12,8 @@ async function adminApi(path, options = {}) {
     window.location.replace('/admin-login.html');
     throw new Error('Administrator sign-in required.');
   }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) throw new Error(response.status === 413 ? 'The selected picture is too large.' : 'The server returned an invalid response. Restart the application server and try again.');
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'The request could not be completed.');
   return data;
@@ -40,10 +43,10 @@ function badge(active) {
   element.textContent = active ? 'Active' : 'Inactive';
   return element;
 }
-function button(text, handler) {
+function button(text, handler, className = 'staff-secondary-button') {
   const element = document.createElement('button');
   element.type = 'button';
-  element.className = 'staff-secondary-button';
+  element.className = className;
   element.textContent = text;
   element.addEventListener('click', () => run(async () => {
     element.disabled = true;
@@ -69,13 +72,34 @@ async function loadOverview() {
 async function loadStaff() {
   const { staff } = await adminApi('/staff');
   $('#staff-list').replaceChildren(...staff.map(person => {
-    const element = card(person.fullName, person.email);
-    element.querySelector('.admin-card-actions').append(badge(person.isActive), button(person.isActive ? 'Deactivate' : 'Activate', async () => {
+    const element = document.createElement('details');
+    element.className = 'admin-card staff-record';
+    element.innerHTML = '<summary><span class="staff-avatar"></span><span><strong></strong></span><span class="staff-state"></span></summary><div class="staff-record-body"><dl><dt>Staff ID</dt><dd class="staff-code"></dd><dt>Email</dt><dd class="staff-email"></dd><dt>Contact</dt><dd class="staff-phone"></dd><dt>Created</dt><dd class="staff-created"></dd></dl><div class="admin-card-actions"></div></div>';
+    const avatar = element.querySelector('.staff-avatar');
+    if (person.profilePictureUrl) {
+      const image = document.createElement('img'); image.src = person.profilePictureUrl; image.alt = '';
+      image.onerror = () => { avatar.replaceChildren(); avatar.textContent = person.fullName.slice(0, 1).toUpperCase(); };
+      avatar.append(image);
+    } else avatar.textContent = person.fullName.slice(0, 1).toUpperCase();
+    element.querySelector('summary strong').textContent = person.fullName;
+    element.querySelector('.staff-state').append(badge(person.isActive));
+    element.querySelector('.staff-code').textContent = person.staffCode || 'Not assigned';
+    element.querySelector('.staff-email').textContent = person.email;
+    element.querySelector('.staff-phone').textContent = person.phone || 'Not provided';
+    element.querySelector('.staff-created').textContent = new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium' }).format(new Date(person.createdAt));
+    const actions = element.querySelector('.admin-card-actions');
+    actions.append(button(person.isActive ? 'Deactivate' : 'Activate', async () => {
       if (!window.confirm(person.isActive ? `Deactivate ${person.fullName}? Their sessions will be signed out.` : `Restore staff access for ${person.fullName}?`)) return;
       const result = await adminApi('/staff/' + person.id, json('PATCH', { isActive: !Boolean(person.isActive) }));
       alertMessage(result.message);
       await loadStaff();
     }));
+    actions.append(button('Delete permanently', async () => {
+      if (!window.confirm(`Permanently delete ${person.fullName}'s Staff account? This removes their login, sessions and Staff audit history and cannot be undone.`)) return;
+      const result = await adminApi('/staff/' + person.id, { method: 'DELETE' });
+      alertMessage(result.message);
+      await loadStaff();
+    }, 'staff-danger-button'));
     return element;
   }));
   if (!staff.length) $('#staff-list').textContent = 'No staff accounts yet. Create the first account using this form.';
@@ -89,26 +113,39 @@ $('#create-staff-form').addEventListener('submit', event => {
     submit.disabled = true;
     try {
       const result = await adminApi('/staff', json('POST', Object.fromEntries(new FormData(form))));
+      const credentials = result.credentials;
       form.reset();
-      $('#staff-password').type = 'password';
-      $('#toggle-password').textContent = 'Show password';
-      $('#toggle-password').setAttribute('aria-pressed', 'false');
+      $('#generated-staff-password').value = credentials.temporaryPassword;
+      adminPicture.setValue('');
       alertMessage(result.message);
+      $('#credential-id').textContent = credentials.staffCode;
+      $('#credential-name').textContent = credentials.fullName;
+      $('#credential-email').textContent = credentials.email;
+      $('#credential-password').textContent = credentials.temporaryPassword;
+      $('#credential-email-status').textContent = credentials.emailSent
+        ? 'The onboarding email was sent. The Staff member must verify their email and change the temporary password.'
+        : credentials.emailFailed
+          ? 'The account was created, but the onboarding email failed to send. Check the SMTP settings and server log.'
+          : 'No email was sent because SMTP is not configured. Use the email draft or configure SMTP before creating accounts for real delivery.';
+      $('#email-credentials').textContent = credentials.emailSent ? 'Email sent' : 'Open email draft';
+      $('#email-credentials').disabled = Boolean(credentials.emailSent);
+      const verification = $('#credential-verification');
+      verification.replaceChildren(); verification.hidden = !credentials.verificationPreviewUrl; $('#verification-link-label').hidden = !credentials.verificationPreviewUrl;
+      if (credentials.verificationPreviewUrl) { const link = document.createElement('a'); link.href = credentials.verificationPreviewUrl; link.textContent = 'Open local verification link'; verification.append(link); }
+      $('#email-credentials').onclick = () => {
+        const subject = encodeURIComponent('Your MediQ Staff login credentials');
+        const body = encodeURIComponent(`Hello ${credentials.fullName},\n\nThe clinic administrator has created your MediQ Staff account.\n\nStaff ID: ${credentials.staffCode}\nLogin email: ${credentials.email}\nTemporary password: ${credentials.temporaryPassword}\n\nPlease verify your email using the link provided by the clinic, then sign in and change the temporary password to a password of your choice. Keep these details private.`);
+        window.location.href = `mailto:${encodeURIComponent(credentials.email)}?subject=${subject}&body=${body}`;
+      };
+      $('#credentials-dialog').showModal();
       await loadStaff();
     } finally { submit.disabled = false; }
   });
 });
-$('#toggle-password').addEventListener('click', () => {
-  const show = $('#staff-password').type === 'password';
-  $('#staff-password').type = show ? 'text' : 'password';
-  $('#toggle-password').textContent = show ? 'Hide password' : 'Show password';
-  $('#toggle-password').setAttribute('aria-pressed', String(show));
-});
-
 async function loadServices() {
   const { services } = await adminApi('/services');
   $('#admin-services').replaceChildren(...services.map(service => {
-    const element = card(service.name, `${service.description || 'No description.'} Average duration: ${service.averageDurationMinutes} minutes.`);
+    const element = card(service.name, `${service.doctorName ? `Doctor: ${service.doctorName}. ` : ''}${service.serviceDetails || service.description || 'No service details.'} Average duration: ${service.averageDurationMinutes} minutes. Capacity: ${service.queueCapacity || 'No limit'}.`);
     element.querySelector('.admin-card-actions').append(badge(service.isActive), button('Edit service', () => openService(service)));
     return element;
   }));
@@ -120,7 +157,10 @@ function openService(service = null) {
   form.reset();
   form.elements.name.value = service?.name || '';
   form.elements.description.value = service?.description || '';
+  form.elements.doctorName.value = service?.doctorName || '';
+  form.elements.serviceDetails.value = service?.serviceDetails || '';
   form.elements.averageDurationMinutes.value = service?.averageDurationMinutes || 15;
+  form.elements.queueCapacity.value = service?.queueCapacity || '';
   form.elements.isActive.checked = service ? Boolean(service.isActive) : true;
   $('#service-dialog-title').textContent = service ? 'Edit clinic service' : 'Add clinic service';
   $('#service-error').textContent = '';
@@ -172,7 +212,28 @@ async function loadHours() {
     return fieldset;
   }));
   $('#save-hours').disabled = false;
+  await loadClosures();
 }
+async function loadClosures() {
+  const { closures } = await adminApi('/closures');
+  $('#closure-list').replaceChildren(...closures.map(item => {
+    const element = card(new Intl.DateTimeFormat('en-MY', { dateStyle: 'full' }).format(new Date(`${item.closureDate}T00:00:00`)), item.reason);
+    element.querySelector('.admin-card-actions').append(button('Remove closure', async () => {
+      const result = await adminApi('/closures/' + item.closureDate, { method: 'DELETE' });
+      alertMessage(result.message); await loadClosures();
+    }));
+    return element;
+  }));
+  if (!closures.length) $('#closure-list').textContent = 'No upcoming special closure dates.';
+}
+$('#closure-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  run(async () => {
+    const result = await adminApi('/closures', json('POST', Object.fromEntries(new FormData(form))));
+    alertMessage(result.message); form.reset(); await loadClosures();
+  });
+});
 function updateDayAvailability(fieldset) {
   const isOpen = fieldset.querySelector('[name="isOpen"]').checked;
   fieldset.classList.toggle('closed', !isOpen);
@@ -212,7 +273,8 @@ window.addEventListener('beforeunload', event => { if (scheduleDirty) { event.pr
 let auditVersion = 0;
 async function loadAudit(page = 1) {
   const version = ++auditVersion;
-  const data = await adminApi('/audit?page=' + page);
+  const filters = new FormData($('#audit-filter-form'));
+  const data = await adminApi('/audit?page=' + page + '&role=' + encodeURIComponent(filters.get('role')) + '&query=' + encodeURIComponent(filters.get('query')));
   if (version !== auditVersion) return;
   auditPage = data.page;
   $('#audit-list').replaceChildren(...data.items.map(item => {
@@ -229,7 +291,38 @@ async function loadAudit(page = 1) {
   $('#audit-next').disabled = !data.hasMore;
 }
 
-const loaders = { overview: loadOverview, staff: loadStaff, services: loadServices, hours: loadHours, activity: loadAudit };
+async function loadPatients() {
+  const query = new FormData($('#patient-search-form')).get('query') || '';
+  const data = await adminApi('/patients?query=' + encodeURIComponent(query));
+  $('#patient-details').replaceChildren();
+  $('#patient-list').replaceChildren(...data.patients.map(patient => {
+    const element = card(patient.fullName, `${patient.email} · ${patient.phone || 'No contact number'}`);
+    element.querySelector('.admin-card-actions').append(button('View history', () => loadPatientDetails(patient.id)));
+    return element;
+  }));
+  if (!data.patients.length) $('#patient-list').textContent = 'No patients match this search.';
+}
+async function loadPatientDetails(id) {
+  const data = await adminApi('/patients/' + id);
+  const panel = $('#patient-details');
+  panel.innerHTML = '<article class="admin-card patient-history"><div class="staff-section-heading"><div><h3></h3><p class="patient-contact"></p></div><button type="button" class="staff-secondary-button close-patient-history">Close</button></div><div class="patient-history-columns"><section><h4>Queue history</h4><div class="queue-history-list"></div></section><section><h4>Appointments</h4><div class="appointment-history-list"></div></section></div></article>';
+  panel.querySelector('h3').textContent = data.patient.fullName;
+  panel.querySelector('.patient-contact').textContent = `${data.patient.email} · ${data.patient.phone || 'No contact number'}`;
+  const makeRows = items => items.map(item => { const row = document.createElement('p'); row.textContent = `${String(item.queueDate || item.appointmentDate).slice(0, 10)} · ${item.serviceName} · ${item.status}`; return row; });
+  panel.querySelector('.queue-history-list').replaceChildren(...makeRows(data.queues));
+  panel.querySelector('.appointment-history-list').replaceChildren(...makeRows(data.appointments));
+  if (!data.queues.length) panel.querySelector('.queue-history-list').textContent = 'No queue history.';
+  if (!data.appointments.length) panel.querySelector('.appointment-history-list').textContent = 'No appointments.';
+  panel.querySelector('.close-patient-history').addEventListener('click', () => panel.replaceChildren());
+}
+async function loadSettings() {
+  const { settings } = await adminApi('/settings'); const form = $('#settings-form');
+  for (const key of ['clinicName', 'address', 'phone', 'timezone']) form.elements[key].value = settings[key] || '';
+  document.querySelectorAll('.brand small').forEach(item => { item.textContent = settings.clinicName; });
+}
+$('#patient-search-form').addEventListener('submit', event => { event.preventDefault(); run(loadPatients); });
+$('#settings-form').addEventListener('submit', event => { event.preventDefault(); run(async () => { const result = await adminApi('/settings', json('PUT', Object.fromEntries(new FormData(event.currentTarget)))); alertMessage(result.message); await loadSettings(); }); });
+const loaders = { overview: loadOverview, staff: loadStaff, services: loadServices, hours: loadHours, patients: loadPatients, settings: loadSettings, activity: loadAudit };
 async function showPanel() {
   const name = Object.hasOwn(loaders, location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
   document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
@@ -245,6 +338,7 @@ window.addEventListener('hashchange', () => run(showPanel));
 $('#refresh-overview').addEventListener('click', () => run(loadOverview));
 $('#refresh-staff').addEventListener('click', () => run(loadStaff));
 $('#refresh-audit').addEventListener('click', () => run(() => loadAudit()));
+$('#audit-filter-form').addEventListener('submit', event => { event.preventDefault(); run(() => loadAudit(1)); });
 $('#audit-previous').addEventListener('click', () => run(() => loadAudit(auditPage - 1)));
 $('#audit-next').addEventListener('click', () => run(() => loadAudit(auditPage + 1)));
 $('#logout-button').addEventListener('click', () => run(async () => {
@@ -254,4 +348,5 @@ $('#logout-button').addEventListener('click', () => run(async () => {
   scheduleDirty = false;
   window.location.replace('/');
 }));
-run(async () => { if (location.hash && location.hash !== '#overview') await loadOverview(); await showPanel(); });
+$('#close-credentials').addEventListener('click', () => $('#credentials-dialog').close());
+run(async () => { await loadSettings(); if (location.hash && location.hash !== '#overview') await loadOverview(); await showPanel(); });

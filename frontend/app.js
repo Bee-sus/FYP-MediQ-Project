@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 function createServiceCard(service) {
   const card = document.createElement('article');
   card.className = 'service-card';
@@ -13,7 +14,7 @@ function createServiceCard(service) {
   availability.textContent = service.availability;
 
   const description = document.createElement('p');
-  description.textContent = service.description;
+  description.textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
 
   const duration = document.createElement('span');
   duration.className = 'service-duration';

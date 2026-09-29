@@ -1,3 +1,4 @@
+fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 const registrationMessages = {
   fullName: 'Enter your full name using at least 2 letters.', email: 'Enter a valid email address.',
   phone: 'Enter a valid phone number containing 8–15 digits.', birthDate: 'Enter a valid date of birth that is not in the future.',
@@ -66,6 +67,8 @@ async function submitAuthForm(form, status) {
   const result = await response.json();
   if (!response.ok) { showServerFieldErrors(result.fields); throw new Error(result.error || 'The request could not be completed.'); }
   status.textContent = result.message; status.className = 'form-status'; status.hidden = false;
+  if (result.verificationPreviewUrl) { const link = document.createElement('a'); link.href = result.verificationPreviewUrl; link.textContent = ' Open local verification link'; status.append(link); }
+  if (result.requiresVerification) return;
   if (result.redirect) window.location.assign(result.redirect);
   else if (isRegistration) setTimeout(() => window.location.assign('/patient-login.html'), 900);
 }
@@ -89,6 +92,13 @@ function configureAuthForm() {
     }
     const button = form.querySelector('.submit-button'); button.disabled = true; status.textContent = 'Please wait…'; status.className = 'form-status'; status.hidden = false;
     try { await submitAuthForm(form, status); } catch (error) { status.textContent = error.message; status.className = 'form-status error'; status.hidden = false; } finally { button.disabled = false; }
+  });
+  form.querySelector('.resend-verification')?.addEventListener('click', async () => {
+    const status = document.querySelector('#form-status'); const email = form.elements.email.value.trim();
+    if (!email) { status.textContent = 'Enter your email address first.'; status.className = 'form-status error'; status.hidden = false; return; }
+    const role = form.dataset.authForm === 'staff-login' ? 'staff' : 'patient';
+    try { const response = await fetch('/api/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); status.textContent = result.message; status.className = 'form-status'; status.hidden = false; if (result.verificationPreviewUrl) { const link = document.createElement('a'); link.href = result.verificationPreviewUrl; link.textContent = ' Open local verification link'; status.append(link); } }
+    catch (error) { status.textContent = error.message; status.className = 'form-status error'; status.hidden = false; }
   });
 }
 

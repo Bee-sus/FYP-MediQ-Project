@@ -11,8 +11,8 @@ async function seedControlledAccount(connection, role, name, email, password) {
   if (!email || !meetsPasswordRules(password)) throw new Error(`${role.toUpperCase()} seed credentials are incomplete or the password is not strong enough.`);
   const passwordHash = await hashPassword(password);
   await connection.execute(
-    `INSERT INTO users (full_name, email, password_hash, role) VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), password_hash = VALUES(password_hash), role = VALUES(role), is_active = TRUE`,
+    `INSERT INTO users (full_name, email, password_hash, role, email_verified_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), password_hash = VALUES(password_hash), role = VALUES(role), is_active = TRUE, email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP)`,
     [name, email.toLowerCase(), passwordHash, role],
   );
 }
@@ -42,6 +42,10 @@ async function setup() {
     await addColumnIfMissing(connection, 'queue_entries', 'cancellation_reason', 'VARCHAR(300) NULL AFTER cancelled_at');
     await addColumnIfMissing(connection, 'queue_entries', 'consultation_started_at', 'TIMESTAMP NULL AFTER called_at');
     await addColumnIfMissing(connection, 'clinic_services', 'is_queue_open', 'BOOLEAN NOT NULL DEFAULT TRUE AFTER is_active');
+    await addColumnIfMissing(connection, 'users', 'staff_code', 'VARCHAR(30) NULL UNIQUE AFTER phone_number');
+    await addColumnIfMissing(connection, 'users', 'profile_picture_url', 'VARCHAR(500) NULL AFTER staff_code');
+    await addColumnIfMissing(connection, 'clinic_services', 'doctor_name', 'VARCHAR(120) NULL AFTER description');
+    await addColumnIfMissing(connection, 'clinic_services', 'service_details', 'VARCHAR(500) NULL AFTER doctor_name');
     await migrateAppointments(connection);
     await migrateAdmin(connection);
     await seedControlledAccount(connection, 'staff', process.env.SEED_STAFF_NAME || 'Clinic Staff', process.env.SEED_STAFF_EMAIL, process.env.SEED_STAFF_PASSWORD);

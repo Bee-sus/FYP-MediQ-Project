@@ -10,6 +10,16 @@ const { validTime, slotIsOpen } = require('../services/clinicScheduleService');
 const router = express.Router();
 const activeStatuses = "'waiting','called','in_progress'";
 
+async function createAppointmentReminders(patientId) {
+  await pool.execute(`INSERT INTO notifications (patient_id, appointment_id, title, message, notification_type)
+    SELECT a.patient_id, a.id, 'Appointment reminder', CONCAT('Reminder: your ', s.name, ' appointment is on ', DATE_FORMAT(a.appointment_date, '%d %b %Y'), ' at ', TIME_FORMAT(a.appointment_time, '%h:%i %p'), '.'), 'appointment'
+    FROM appointments a JOIN clinic_services s ON s.id = a.service_id
+    WHERE a.patient_id = ? AND a.status = 'approved' AND a.appointment_date BETWEEN CURRENT_DATE AND DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY)
+      AND a.reminder_sent_at IS NULL`, [patientId]);
+  await pool.execute(`UPDATE appointments SET reminder_sent_at = CURRENT_TIMESTAMP WHERE patient_id = ? AND status = 'approved'
+    AND appointment_date BETWEEN CURRENT_DATE AND DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY) AND reminder_sent_at IS NULL`, [patientId]);
+}
+
 function queueSelect(whereClause) {
   return `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
                  q.cancelled_at AS cancelledAt, q.cancellation_reason AS cancellationReason,
@@ -25,14 +35,16 @@ function queueSelect(whereClause) {
 
 router.get('/overview', ...requireRole('patient'), async (request, response) => {
   try {
+    await createAppointmentReminders(request.user.id);
     const [activeQueues] = await pool.execute(
       `${queueSelect(`q.patient_id = ? AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})`)}
        ORDER BY q.joined_at DESC LIMIT 1`,
       [request.user.id],
     );
     const [services] = await pool.execute(
-      `SELECT id, name, description, average_duration_minutes AS averageDurationMinutes
-       FROM clinic_services WHERE is_active = TRUE ORDER BY name`,
+      `SELECT s.id, s.name, s.description, s.doctor_name AS doctorName, s.service_details AS serviceDetails, s.average_duration_minutes AS averageDurationMinutes,
+       s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
+       FROM clinic_services s WHERE s.is_active = TRUE ORDER BY s.name`,
     );
     const [history] = await pool.execute(
       `SELECT q.id, q.queue_number AS queueNumber, q.queue_date AS queueDate, q.status,
@@ -77,8 +89,9 @@ router.get('/overview', ...requireRole('patient'), async (request, response) => 
 router.get('/services', ...requireRole('patient'), async (request, response) => {
   try {
     const [services] = await pool.execute(
-      `SELECT id, name, description, average_duration_minutes AS averageDurationMinutes
-       FROM clinic_services WHERE is_active = TRUE ORDER BY name`,
+      `SELECT s.id, s.name, s.description, s.doctor_name AS doctorName, s.service_details AS serviceDetails, s.average_duration_minutes AS averageDurationMinutes,
+       s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
+       FROM clinic_services s WHERE s.is_active = TRUE ORDER BY s.name`,
     );
     return response.json({ services });
   } catch (error) {
@@ -123,7 +136,7 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
     }
 
     const [services] = await connection.execute(
-      `SELECT id, name, average_duration_minutes AS averageDurationMinutes
+      `SELECT id, name, average_duration_minutes AS averageDurationMinutes, queue_capacity AS queueCapacity
        FROM clinic_services WHERE id = ? AND is_active = TRUE AND is_queue_open = TRUE FOR UPDATE`,
       [serviceId],
     );
@@ -143,6 +156,9 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
       [serviceId],
     );
     const peopleAhead = Number(countRows[0].peopleAhead);
+    if (services[0].queueCapacity && peopleAhead >= Number(services[0].queueCapacity)) {
+      await connection.rollback(); return response.status(409).json({ error: 'This queue has reached its patient capacity. Please choose another service or try later.' });
+    }
     const estimatedMinutes = peopleAhead * Number(services[0].averageDurationMinutes);
     const [queueResult] = await connection.execute(
       `INSERT INTO queue_entries (patient_id, service_id, queue_date, queue_number, status)
@@ -150,9 +166,10 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
       [request.user.id, serviceId, queueNumber],
     );
     await connection.execute(
-      `INSERT INTO waiting_time_predictions (queue_entry_id, estimated_minutes, model_version)
-       VALUES (?, ?, 'baseline-average-duration-v1')`,
-      [queueResult.insertId, estimatedMinutes],
+      `INSERT INTO waiting_time_predictions
+       (queue_entry_id, estimated_minutes, model_version, people_ahead, service_duration_minutes, joined_hour, joined_weekday)
+       VALUES (?, ?, 'baseline-average-duration-v1', ?, ?, HOUR(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')), WEEKDAY(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')))`,
+      [queueResult.insertId, estimatedMinutes, peopleAhead, Number(services[0].averageDurationMinutes)],
     );
     await connection.execute(
       `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
@@ -256,6 +273,7 @@ router.get('/history', ...requireRole('patient'), async (request, response) => {
 
 router.get('/appointments', ...requireRole('patient'), async (request, response) => {
   try {
+    await createAppointmentReminders(request.user.id);
     const [items] = await pool.execute(
       `SELECT a.id, DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointmentDate, TIME_FORMAT(a.appointment_time, '%H:%i') AS appointmentTime,
               a.notes, a.status, a.rejection_reason AS rejectionReason, a.created_at AS createdAt,

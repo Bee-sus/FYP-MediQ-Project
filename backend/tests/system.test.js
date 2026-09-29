@@ -52,6 +52,7 @@ describe('system endpoints', () => {
     ['/register.html', 'Patient registration'],
     ['/staff-login.html', 'Staff sign in'],
     ['/admin-login.html', 'Administrator sign in'],
+    ['/verify-email.html', 'Verify your email'],
     ['/terms.html', 'Terms and Conditions &amp; Privacy Notice'],
   ])('serves the authentication page %s', async (path, heading) => {
     const response = await request(app).get(path);
@@ -100,7 +101,10 @@ describe('system endpoints', () => {
   });
 
   test('registers valid public accounts as patients only', async () => {
-    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([{ insertId: 42 }]);
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([{ insertId: 42 }])
+      .mockResolvedValueOnce([{ affectedRows: 0 }])
+      .mockResolvedValueOnce([{ insertId: 1 }]);
     const response = await request(app).post('/api/auth/register').send({
       fullName: 'Test Patient', email: 'patient@example.com', phone: '+60 12-345 6789',
       birthDate: '2000-01-01', gender: 'prefer-not-to-say', password: 'Strong-Patient-2026!',
@@ -108,8 +112,11 @@ describe('system endpoints', () => {
     });
 
     expect(response.statusCode).toBe(201);
+    expect(response.body).toMatchObject({ userId: 42, requiresVerification: true });
+    expect(response.body.verificationPreviewUrl).toContain('/verify-email.html?token=');
     expect(execute.mock.calls[0][0]).toContain("'patient'");
     expect(execute.mock.calls[0][1][2]).not.toContain('Strong-Patient-2026!');
+    expect(execute.mock.calls[2][0]).toContain('email_verification_tokens');
     execute.mockRestore();
   });
 
@@ -136,6 +143,20 @@ describe('system endpoints', () => {
     expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
     expect(response.headers['set-cookie'][0]).toContain('SameSite=Strict');
     expect(execute).toHaveBeenCalledTimes(2);
+    execute.mockRestore();
+  });
+
+  test('blocks an unverified non-admin account from signing in', async () => {
+    const passwordHash = await hashPassword('Strong-Staff-2026!');
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 7, full_name: 'Clinic Staff', email: 'staff@example.com', password_hash: passwordHash, role: 'staff', is_active: 1, email_verified_at: null },
+    ]]);
+
+    const response = await request(app).post('/api/auth/login').send({ email: 'staff@example.com', password: 'Strong-Staff-2026!', role: 'staff' });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body.emailVerificationRequired).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
     execute.mockRestore();
   });
 
@@ -299,7 +320,7 @@ describe('system endpoints', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.execute.mock.calls[6][0]).toContain('waiting_time_predictions');
-    expect(connection.execute.mock.calls[6][1]).toEqual([81, 30]);
+    expect(connection.execute.mock.calls[6][1]).toEqual([81, 30, 2, 15]);
     expect(connection.release).toHaveBeenCalledTimes(1);
     execute.mockRestore();
     getConnection.mockRestore();
@@ -396,6 +417,7 @@ describe('system endpoints', () => {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
         .mockResolvedValueOnce([[{ id: 1 }]])
+        .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))])
         .mockResolvedValueOnce([[{ id: 2, name: 'General Consultation' }]])
         .mockResolvedValueOnce([[]])
@@ -411,7 +433,7 @@ describe('system endpoints', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.body.appointmentId).toBe(44);
-    expect(connection.execute.mock.calls[4][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
+    expect(connection.execute.mock.calls[5][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
     execute.mockRestore();

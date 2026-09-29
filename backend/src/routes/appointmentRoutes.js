@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 const { requireRole } = require('../middleware/authentication');
 const { activeStatuses, validDate, futureSlot, lockBookings, hasConflict } = require('../services/appointmentService');
 
-const { readHours, slotsForDate, slotIsOpen } = require('../services/clinicScheduleService');
+const { availableSlotsForDate, slotIsOpen } = require('../services/clinicScheduleService');
 
 const staff = express.Router();
 const patient = express.Router();
@@ -13,13 +13,13 @@ async function availability(request, response) {
   const date = String(request.query.date || '');
   if (!validDate(date)) return response.status(422).json({ error: 'Select a valid date.' });
   try {
-    const slots = slotsForDate(await readHours(pool), date);
+    const availability = await availableSlotsForDate(pool, date);
     const [booked] = await pool.execute(
       `SELECT TIME_FORMAT(appointment_time, '%H:%i') AS time FROM appointments
        WHERE appointment_date = ? AND status IN (${activeStatuses})`, [date],
     );
     const reserved = new Set(booked.map((item) => item.time));
-    return response.json({ date, slots: slots.filter((time) => futureSlot(date, time) && !reserved.has(time)) });
+    return response.json({ date, closureReason: availability.closureReason, slots: availability.slots.filter((time) => futureSlot(date, time) && !reserved.has(time)) });
   } catch (error) {
     return response.status(503).json({ error: 'Appointment availability is temporarily unavailable.' });
   }
@@ -30,18 +30,27 @@ staff.get('/appointments/availability', ...requireRole('staff'), availability);
 
 staff.get('/appointments', ...requireRole('staff'), async (request, response) => {
   const status = String(request.query.status || '');
+  const search = String(request.query.search || '').trim().slice(0, 80);
+  const from = String(request.query.from || ''); const to = String(request.query.to || '');
+  const page = Math.max(1, Number.parseInt(request.query.page, 10) || 1); const limit = 20; const offset = (page - 1) * limit;
   if (status && !statuses.has(status)) return response.status(422).json({ error: 'Select a valid appointment status.' });
+  if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) || (from && to && from > to)) return response.status(422).json({ error: 'Choose a valid appointment date range.' });
   try {
+    const clauses = [], parameters = [];
+    if (status) { clauses.push('a.status = ?'); parameters.push(status); }
+    if (search) { clauses.push('(u.full_name LIKE ? OR s.name LIKE ?)'); parameters.push(`%${search}%`, `%${search}%`); }
+    if (from) { clauses.push('a.appointment_date >= ?'); parameters.push(from); }
+    if (to) { clauses.push('a.appointment_date <= ?'); parameters.push(to); }
     const [appointments] = await pool.execute(
       `SELECT a.id, a.patient_id AS patientId, a.status, a.notes, a.rejection_reason AS rejectionReason,
               DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointmentDate,
               TIME_FORMAT(a.appointment_time, '%H:%i') AS appointmentTime,
               s.name AS serviceName, u.full_name AS patientName
        FROM appointments a JOIN users u ON u.id = a.patient_id JOIN clinic_services s ON s.id = a.service_id
-       ${status ? 'WHERE a.status = ?' : ''} ORDER BY a.appointment_date DESC, a.appointment_time DESC, a.id DESC`,
-      status ? [status] : [],
+       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY a.appointment_date DESC, a.appointment_time DESC, a.id DESC LIMIT ${limit + 1} OFFSET ${offset}`,
+      parameters,
     );
-    return response.json({ appointments });
+    return response.json({ appointments: appointments.slice(0, limit), page, hasMore: appointments.length > limit });
   } catch (error) {
     return response.status(503).json({ error: 'Appointment requests are temporarily unavailable.' });
   }

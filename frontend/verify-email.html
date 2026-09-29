@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Verify Email | MediQ</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body class="verify-body">
+    <main class="verify-page">
+      <section class="verify-card" data-state="checking" aria-labelledby="verification-heading">
+        <a class="verify-brand" href="/" aria-label="MediQ home">Medi<span>Q</span></a>
+        <div id="verification-icon" class="verification-icon" aria-hidden="true">✓</div>
+        <p class="eyebrow">Account security</p>
+        <h1 id="verification-heading">Verify your email</h1>
+        <p id="verification-description" class="verify-description">We are checking your verification link.</p>
+        <p id="verification-status" class="form-status" role="status" aria-live="polite">Checking your verification link…</p>
+        <a id="verification-login" class="submit-button verify-action" href="/patient-login.html" hidden>Continue to sign in</a>
+        <a class="verify-home-link" href="/">Return to MediQ home</a>
+      </section>
+    </main>
+    <script src="verify-email.js"></script>
+  </body>
+</html>

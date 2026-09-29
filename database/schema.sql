@@ -10,10 +10,14 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(190) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   phone_number VARCHAR(30),
+  staff_code VARCHAR(30) NULL UNIQUE,
+  profile_picture_url MEDIUMTEXT NULL,
   birth_date DATE NULL,
   gender ENUM('female', 'male', 'other', 'prefer-not-to-say') NULL,
   role ENUM('patient', 'staff', 'admin') NOT NULL DEFAULT 'patient',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+  email_verified_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -28,16 +32,38 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   INDEX idx_session_expiry (expires_at)
 );
 
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_verification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_verification_expiry (expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS clinic_services (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(120) NOT NULL,
   description TEXT,
+  doctor_name VARCHAR(120) NULL,
+  service_details VARCHAR(500) NULL,
   average_duration_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 15,
+  queue_capacity INT UNSIGNED NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   is_queue_open BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uq_service_name UNIQUE (name)
 );
+
+CREATE TABLE IF NOT EXISTS clinic_settings (
+  id TINYINT UNSIGNED PRIMARY KEY,
+  clinic_name VARCHAR(120) NOT NULL DEFAULT 'MediQ Clinic',
+  address VARCHAR(300) NULL,
+  phone VARCHAR(30) NULL,
+  timezone VARCHAR(60) NOT NULL DEFAULT 'Asia/Kuala_Lumpur'
+);
+INSERT IGNORE INTO clinic_settings (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS queue_entries (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -64,6 +90,11 @@ CREATE TABLE IF NOT EXISTS waiting_time_predictions (
   estimated_minutes DECIMAL(6,2) NOT NULL,
   model_version VARCHAR(80) NOT NULL,
   predicted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  people_ahead INT UNSIGNED NULL,
+  service_duration_minutes INT UNSIGNED NULL,
+  joined_hour TINYINT UNSIGNED NULL,
+  joined_weekday TINYINT UNSIGNED NULL,
+  actual_wait_minutes DECIMAL(6,2) NULL,
   CONSTRAINT fk_prediction_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id)
 );
 
@@ -82,6 +113,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   status ENUM('pending', 'approved', 'rejected', 'completed', 'cancelled', 'reschedule_proposed') NOT NULL DEFAULT 'pending',
   rejection_reason VARCHAR(300) NULL,
   cancelled_at TIMESTAMP NULL,
+  reminder_sent_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_appointment_patient FOREIGN KEY (patient_id) REFERENCES users(id),

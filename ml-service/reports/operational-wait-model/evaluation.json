@@ -1,0 +1,118 @@
+{
+  "dataset": "Medical Analytics Group Operational AI Challenge, F4 walk-in facility",
+  "source_file": "WaitData.Published.xlsx",
+  "source_sheet": "F4",
+  "rows_read": 48430,
+  "rows_used": 48430,
+  "rows_excluded_missing_target_or_timestamp": 0,
+  "rows_excluded_all_candidate_features_missing": 0,
+  "source_missing_values_by_column": {
+    "DayOfWeek": 31,
+    "Month": 31,
+    "DayOfYear": 31
+  },
+  "candidate_feature_missing_values_before_imputation": 0,
+  "predictor_missing_values_imputed_by": "training-set median",
+  "data_quality_audit": {
+    "exact_duplicate_source_rows": 0,
+    "duplicate_rows_on_target_timestamp_and_candidate_features": 6,
+    "rows_with_repeated_arrival_timestamp": 366,
+    "distinct_repeated_arrival_timestamps": 183,
+    "negative_wait_values": 0,
+    "none_completed_flag_rows_corrected_from_daily_count": 16,
+    "wait_upper_iqr_fence_minutes": 20.5,
+    "wait_values_above_iqr_fence": 2614,
+    "wait_values_over_60_minutes": 9,
+    "minimum_line_count_among_waits_over_60": 4,
+    "minimum_ahead_count_among_waits_over_60": 60,
+    "outlier_policy": "Retain plausible long waits; do not remove by an IQR rule alone."
+  },
+  "target": "Wait",
+  "target_note": "Supplied F4 wait target; do not derive from anonymized timestamps.",
+  "split_method": "chronological by whole clinic day derived from x_ArrivalDTTM, used for ordering only",
+  "split_rows": {
+    "train": 33218,
+    "validation": 7409,
+    "test": 7803
+  },
+  "target_summary_minutes": {
+    "min": 0.0,
+    "median": 6.0,
+    "mean": 7.8295890976667355,
+    "max": 89.0
+  },
+  "feature_selection_validation": {
+    "mutual_information_filter": {
+      "validation_mae_minutes": 3.714171434510972,
+      "selected_features": [
+        "LineCount0",
+        "NumCustomersInLastW1",
+        "AvgWaitLastW1"
+      ]
+    },
+    "elastic_net_embedded": {
+      "validation_mae_minutes": 3.6411880374104544,
+      "selected_features": [
+        "LineCount0",
+        "AheadCount",
+        "NoneInLine",
+        "NoneInProgress",
+        "NoneCompleted",
+        "StartTime",
+        "StartTime4",
+        "InProgressSize",
+        "NumCompletedToday",
+        "NumCompletedInLastW1",
+        "NumCustomersInLastW1",
+        "AvgWaitLastW1"
+      ]
+    },
+    "extra_trees_embedded": {
+      "validation_mae_minutes": 3.714171434510972,
+      "selected_features": [
+        "LineCount0",
+        "NumCustomersInLastW1",
+        "AvgWaitLastW1"
+      ]
+    }
+  },
+  "feature_count_rule": "Choose the smallest top-k set within 0.25 validation MAE minutes of that method's best score.",
+  "selected_feature_selection_method": "elastic_net_embedded",
+  "selected_features": [
+    "LineCount0",
+    "AheadCount",
+    "NoneInLine",
+    "NoneInProgress",
+    "NoneCompleted",
+    "StartTime",
+    "StartTime4",
+    "InProgressSize",
+    "NumCompletedToday",
+    "NumCompletedInLastW1",
+    "NumCustomersInLastW1",
+    "AvgWaitLastW1"
+  ],
+  "validation_model_mae_minutes": {
+    "linear_regression": 3.732793033533597,
+    "random_forest": 3.741257455351231,
+    "hist_gradient_boosting": 3.6432528783674503
+  },
+  "selected_model": "hist_gradient_boosting",
+  "test_results": {
+    "model_mae_minutes": 4.155989596338503,
+    "model_rmse_minutes": 6.1953990491466895,
+    "median_baseline_mae_minutes": 5.211457131872357,
+    "median_baseline_rmse_minutes": 8.168300490163391
+  },
+  "test_order_range": {
+    "first_event": "2025-04-24 08:37:05",
+    "last_event": "2025-07-20 18:32:03"
+  },
+  "limitations": [
+    "F4 is an imaging-facility walk-in workflow; MediQ clinic transfer is not established.",
+    "F4 Wait measures physical arrival-to-exam-start time; it may not match remote queue-join-to-consultation time.",
+    "Only the supplied Wait target and arrival-time features are used; dynamic remaining-wait prediction is not validated.",
+    "Features were limited to operational fields that can be mapped from MediQ queue records.",
+    "The challenge page offers the dataset for download but does not identify a formal reuse licence; verify terms before redistribution."
+  ]
+}

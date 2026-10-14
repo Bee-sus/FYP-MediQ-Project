@@ -87,7 +87,6 @@ function createServiceCard(service) {
   card.innerHTML = `
     <div class="feature-service-icon" aria-hidden="true">+</div>
     <div class="feature-service-copy"><h2></h2><p></p></div>
-    <span class="service-duration-pill"></span>
     <div class="feature-service-actions">
       <a class="secondary-card-action">Book appointment</a>
       <a class="primary-card-action">Join queue</a>
@@ -95,7 +94,6 @@ function createServiceCard(service) {
   `;
   card.querySelector('h2').textContent = service.name;
   card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
-  card.querySelector('.service-duration-pill').textContent = `Approx. ${service.averageDurationMinutes} min`;
   card.querySelector('.secondary-card-action').href = `/appointments.html?service=${service.id}`;
   card.querySelector('.primary-card-action').href = `/join-queue.html?service=${service.id}`;
   return card;
@@ -120,7 +118,7 @@ function historyRow(item) {
   row.querySelector('.history-date strong').textContent = String(date.getDate()).padStart(2, '0');
   row.querySelector('.history-date span').textContent = new Intl.DateTimeFormat('en-MY', { month: 'short', year: 'numeric' }).format(date);
   row.querySelector('.history-main h2').textContent = item.serviceName;
-  row.querySelector('.history-main p').textContent = `Queue Q-${String(item.queueNumber).padStart(3, '0')}${item.cancellationReason ? ` · Reason: ${item.cancellationReason}` : ''}`;
+  row.querySelector('.history-main p').textContent = `Queue ${formatQueueTicket(item.serviceId, item.queueNumber)}${item.cancellationReason ? ` · Reason: ${item.cancellationReason}` : ''}`;
   const status = row.querySelector('.record-status');
   status.textContent = item.status.replace('_', ' ');
   status.dataset.status = item.status;

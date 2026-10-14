@@ -1,9 +1,11 @@
 fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 let activeQueue = null;
 const labels = { waiting: 'Waiting', called: 'Please proceed', in_progress: 'In consultation' };
+const malaysiaClock = new Intl.DateTimeFormat('en-MY', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kuala_Lumpur' });
 
-function formatQueueNumber(value) {
-  return `Q-${String(value).padStart(3, '0')}`;
+function formatQueueTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : malaysiaClock.format(date);
 }
 
 function renderNoQueue() {
@@ -21,41 +23,62 @@ function renderActiveQueue(queue) {
   const content = document.querySelector('#queue-status-content');
   content.innerHTML = `
     <div class="status-hero-card">
-      <div class="status-number"><span>Your queue number</span><strong id="queue-number"></strong><small id="service-name"></small></div>
+      <div class="status-topline">
+        <div class="status-number"><span>Your queue number</span><strong id="queue-number"></strong><small id="service-name"></small></div>
+        <div class="status-heading">
+          <span id="queue-status-badge" class="queue-status-badge"></span>
+          <h2 id="queue-guidance"></h2>
+          <p id="joined-time"></p><small id="queue-last-updated" class="queue-last-updated"></small>
+        </div>
+      </div>
       <div class="status-summary">
-        <span id="queue-status-badge" class="queue-status-badge"></span>
-        <h2 id="queue-guidance"></h2>
-        <p id="joined-time"></p><small id="queue-last-updated" class="queue-last-updated"></small>
-        <div class="status-metrics"><div><strong id="people-ahead"></strong><span>People ahead</span></div><div><strong id="estimated-wait"></strong><span>Prototype estimate</span></div></div>
-        <p class="estimate-explanation estimate-explanation-dark">Calculated from people ahead and average consultation duration—not a trained ML prediction.</p>
+        <div class="status-metrics"><div><strong id="people-ahead"></strong><span>People ahead</span></div><div><span class="status-wait-main"><strong id="estimated-wait"></strong><em id="estimated-time-range" class="estimated-time-range" hidden></em></span><span id="wait-metric-label">Estimated wait to consultation</span></div></div>
+      </div>
+      <div class="queue-journey">
+        <div class="queue-journey-heading"><strong>Your visit progress</strong><span id="journey-message"></span></div>
+        <div id="queue-journey-track" class="queue-journey-track" role="progressbar" aria-label="Visit progress" aria-valuemin="0" aria-valuemax="3"><span id="queue-journey-fill"></span></div>
+        <div class="queue-journey-labels"><span>Joined</span><span>Called</span><span>Consultation</span></div>
       </div>
     </div>
-    <div class="queue-progress-card">
-      <div class="progress-heading"><div data-stage="joined"><span class="progress-icon" aria-hidden="true">✓</span><div><strong>Queue joined</strong><small>Your place is reserved</small></div></div><span class="progress-line"></span><div data-stage="called"><span class="progress-icon upcoming" aria-hidden="true">2</span><div><strong>Wait for call</strong><small>Monitor this page</small></div></div><span class="progress-line"></span><div data-stage="consultation"><span class="progress-icon upcoming" aria-hidden="true">3</span><div><strong>Consultation</strong><small>Proceed when called</small></div></div></div>
-    </div>
     <div class="status-actions-row">
-      <div class="status-notice"><span class="notice-symbol" aria-hidden="true">i</span><div><strong>Stay ready</strong><p>Queue positions and estimates may change when clinical priorities arise. Select Refresh status for the latest position.</p></div></div>
+      <div class="status-notice"><span class="notice-symbol" aria-hidden="true">i</span><div><strong id="status-notice-title"></strong><p id="status-notice-message"></p></div></div>
       <button id="open-cancel-dialog" class="text-danger-button" type="button">Cancel queue entry</button>
     </div>
   `;
-  document.querySelector('#queue-number').textContent = formatQueueNumber(queue.queueNumber);
+  document.querySelector('#queue-number').textContent = formatQueueTicket(queue.serviceId, queue.queueNumber);
   document.querySelector('#service-name').textContent = queue.serviceName;
   document.querySelector('#queue-status-badge').textContent = labels[queue.status] || queue.status;
-  document.querySelector('#queue-guidance').textContent = queue.status === 'called' ? 'It is nearly your turn.' : queue.status === 'in_progress' ? 'Your consultation is in progress.' : 'You are in the queue.';
-  document.querySelector('#joined-time').textContent = `Joined ${new Intl.DateTimeFormat('en-MY', { hour: 'numeric', minute: '2-digit' }).format(new Date(queue.joinedAt))}`;
+  document.querySelector('#queue-guidance').textContent = queue.status === 'called' ? 'You have been called. Please proceed.' : queue.status === 'in_progress' ? 'Your consultation is in progress.' : 'You are in the queue.';
+  const updatedAt = new Date();
+  const joinedAt = new Date(queue.joinedAt);
+  const joinedTime = formatQueueTime(joinedAt);
+  const updatedTime = formatQueueTime(updatedAt);
+  const waitingAtFront = queue.status === 'waiting' && Number(queue.peopleAhead) === 0;
+  const estimate = queueEstimatePresentation(queue, updatedAt);
+  document.querySelector('#joined-time').textContent = joinedTime ? `Joined ${joinedTime}` : 'Joined today';
+  document.querySelector('#queue-last-updated').textContent = `Automatically updated ${updatedTime}`;
   document.querySelector('#people-ahead').textContent = queue.peopleAhead;
-  document.querySelector('#estimated-wait').textContent = queue.estimatedMinutes == null ? 'Calculating' : `~${Math.round(queue.estimatedMinutes)} min`;
-  document.querySelector('#queue-last-updated').textContent = `Automatically updated ${new Intl.DateTimeFormat('en-MY', { timeStyle: 'short' }).format(new Date())}`;
-  const calledIcon = document.querySelector('[data-stage="called"] .progress-icon');
-  const consultationIcon = document.querySelector('[data-stage="consultation"] .progress-icon');
-  if (queue.status === 'called' || queue.status === 'in_progress') {
-    calledIcon.classList.remove('upcoming');
-    calledIcon.textContent = '✓';
-  }
-  if (queue.status === 'in_progress') {
-    consultationIcon.classList.remove('upcoming');
-    consultationIcon.textContent = '✓';
-  }
+  const waitValue = document.querySelector('#estimated-wait');
+  const waitLabel = document.querySelector('#wait-metric-label');
+  const timeRange = document.querySelector('#estimated-time-range');
+  waitValue.textContent = estimate.waitValue;
+  waitLabel.textContent = estimate.waitLabel;
+  timeRange.hidden = !estimate.clockText;
+  timeRange.textContent = estimate.clockText;
+  const stage = queue.status === 'in_progress' ? 3 : queue.status === 'called' ? 2 : 1;
+  const journey = document.querySelector('.queue-journey');
+  journey.dataset.stage = String(stage);
+  const journeyTrack = document.querySelector('#queue-journey-track');
+  journeyTrack.setAttribute('aria-valuenow', String(stage));
+  journeyTrack.setAttribute('aria-valuetext', stage === 3 ? 'In consultation' : stage === 2 ? 'Called' : 'Joined, waiting for call');
+  document.querySelector('#queue-journey-fill').style.width = `${stage / 3 * 100}%`;
+  document.querySelector('#journey-message').textContent = stage === 3 ? 'Consultation in progress'
+    : stage === 2 ? 'Please proceed to the clinic counter'
+      : waitingAtFront ? 'Waiting for call' : `${queue.peopleAhead} ${Number(queue.peopleAhead) === 1 ? 'person' : 'people'} ahead`;
+  document.querySelector('#status-notice-title').textContent = stage === 3 ? 'Consultation underway' : stage === 2 ? 'Please proceed now' : queue.reminderMessage ? 'Queue reminder' : 'Stay ready';
+  document.querySelector('#status-notice-message').textContent = stage === 3 ? 'Your queue status will update after staff complete the consultation.'
+    : stage === 2 ? 'Staff have called your queue number. Please proceed to the clinic counter.'
+      : queue.reminderMessage || 'Queue position and remaining-wait estimate refresh every 30 seconds. Select Refresh status to update sooner.';
   const cancelButton = document.querySelector('#open-cancel-dialog');
   if (queue.status === 'in_progress') cancelButton.hidden = true;
   else cancelButton.addEventListener('click', () => document.querySelector('#cancel-dialog').showModal());
@@ -123,5 +146,7 @@ document.querySelector('#logout-button').addEventListener('click', async () => {
   window.location.replace('/');
 });
 loadQueueStatus();
-setInterval(() => { if (!document.hidden) loadQueueStatus(); }, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQueueStatus(); });
+window.setInterval(() => {
+  if (!document.hidden) loadQueueStatus(false);
+}, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQueueStatus(false); });

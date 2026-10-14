@@ -158,4 +158,4 @@ VALUES
   ('Dental Consultation', 'Assessment and consultation for common dental concerns.', 20),
   ('Specialist Consultation', 'Consultation requested with an available clinic specialist.', 25),
   ('Pharmacy Collection', 'Collection of medication prepared by the clinic pharmacy.', 5)
-ON DUPLICATE KEY UPDATE description = VALUES(description), average_duration_minutes = VALUES(average_duration_minutes);
+ON DUPLICATE KEY UPDATE id = id;

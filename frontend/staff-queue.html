@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Live Queue | MediQ Staff</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="staff-dashboard.css" />
+  </head>
+  <body class="staff-body" data-staff-page="queue">
+    <header class="staff-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="staff-account">
+        <div><strong id="staff-name">Clinic staff</strong><span>Staff account</span></div>
+        <button id="logout-button" class="staff-secondary-button" type="button">Sign out</button>
+      </div>
+    </header>
+    <div class="staff-layout">
+      <nav class="staff-nav" aria-label="Staff portal">
+        <a href="/staff-dashboard.html"><span aria-hidden="true">⌂</span>Overview</a>
+        <a class="active" href="/staff-queue.html" aria-current="page"><span aria-hidden="true">Q</span>Live queue</a>
+        <a href="/staff-appointments.html"><span aria-hidden="true">□</span>Appointments</a>
+        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
+        <a href="/staff-profile.html"><span aria-hidden="true">●</span>Profile</a>
+      </nav>
+      <main class="staff-main">
+        <section class="staff-heading">
+          <div><p class="staff-eyebrow">Live operations</p><h1>Live service queues</h1><p>Call the next patient when the clinician is ready. Queue information refreshes every 20 seconds.</p></div>
+          <button id="refresh-button" class="staff-secondary-button" type="button">↻ Refresh queues</button>
+        </section>
+        <p id="staff-alert" class="staff-alert" role="status" aria-live="polite" hidden></p>
+        <div id="queue-reminder-banner" class="queue-reminder-banner" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
+        <section class="staff-section" aria-labelledby="queue-heading">
+          <div class="staff-section-heading">
+            <div><h2 id="queue-heading">Today’s queues</h2><p>Current wait follows queue activity. Initial ML or average estimates were made when patients joined.</p></div>
+            <span id="last-updated" aria-live="polite"></span>
+          </div>
+          <div class="queue-legend" aria-label="Queue statuses"><span class="waiting">Waiting</span><span class="called">Called</span><span class="in-progress">In consultation</span><span class="cancelled">Cancelled</span></div>
+          <div id="service-queues" class="service-queues" aria-live="polite"><p class="staff-loading">Loading live queues…</p></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="staff-confirmation" class="staff-dialog" aria-labelledby="confirmation-title">
+      <form method="dialog">
+        <p class="staff-eyebrow">Confirm staff action</p>
+        <h2 id="confirmation-title">Update queue?</h2>
+        <p id="confirmation-message"></p>
+        <div><button value="cancel" class="staff-secondary-button">Go back</button><button id="confirm-action" value="confirm" class="staff-primary-button">Confirm</button></div>
+      </form>
+    </dialog>
+    <script src="queue-ticket.js"></script>
+    <script src="staff-dashboard.js"></script>
+  </body>
+</html>

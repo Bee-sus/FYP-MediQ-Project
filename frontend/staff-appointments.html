@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Appointments | MediQ Staff</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="staff-dashboard.css" />
+  </head>
+  <body class="staff-body" data-staff-page="appointments">
+    <header class="staff-header">
+      <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
+      <div class="staff-account">
+        <div><strong id="staff-name">Clinic staff</strong><span>Staff account</span></div>
+        <button id="logout-button" class="staff-secondary-button" type="button">Sign out</button>
+      </div>
+    </header>
+    <div class="staff-layout">
+      <nav class="staff-nav" aria-label="Staff portal">
+        <a href="/staff-dashboard.html"><span aria-hidden="true">⌂</span>Overview</a>
+        <a href="/staff-queue.html"><span aria-hidden="true">Q</span>Live queue</a>
+        <a class="active" href="/staff-appointments.html" aria-current="page"><span aria-hidden="true">□</span>Appointments</a>
+        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
+        <a href="/staff-profile.html"><span aria-hidden="true">●</span>Profile</a>
+      </nav>
+      <main class="staff-main">
+        <section class="staff-heading">
+          <div><p class="staff-eyebrow">Appointment requests</p><h1>Appointments</h1><p>Review requests, approve a slot, or propose a new time.</p></div>
+          <button id="refresh-button" class="staff-secondary-button" type="button">↻ Refresh appointments</button>
+        </section>
+        <p id="staff-alert" class="staff-alert" role="status" aria-live="polite" hidden></p>
+        <section class="staff-section" aria-labelledby="appointments-heading">
+          <div class="staff-section-heading">
+            <div><h2 id="appointments-heading">Manage appointments</h2><p>Search, filter and manage patient appointment requests.</p></div>
+          </div>
+          <form id="appointment-filters" class="appointment-filters"><label>Search<input name="search" placeholder="Patient or service" /></label><label>Status<select id="appointment-filter" name="status"><option value="pending">Pending</option><option value="approved">Approved</option><option value="reschedule_proposed">Awaiting patient response</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option><option value="">All</option></select></label><label>From<input name="from" type="date" /></label><label>To<input name="to" type="date" /></label><button class="staff-secondary-button" type="submit">Apply</button></form>
+          <div id="staff-appointments" aria-live="polite"><p>Loading appointments…</p></div>
+          <div class="admin-pagination"><button id="appointment-previous" class="staff-secondary-button" type="button">Previous</button><span id="appointment-page">Page 1</span><button id="appointment-next" class="staff-secondary-button" type="button">Next</button></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="appointment-dialog" class="staff-dialog" aria-labelledby="appointment-dialog-title">
+      <form id="staff-appointment-form">
+        <h2 id="appointment-dialog-title">Appointment decision</h2>
+        <p id="appointment-dialog-description"></p>
+        <div id="reschedule-fields" hidden>
+          <label>Proposed date<input id="proposed-date" type="date" /></label>
+          <label>Available time (Malaysia time)<select id="proposed-time"><option value="">Select a date first</option></select></label>
+          <p>The original slot will be released. The new slot is held until the patient accepts or declines.</p>
+        </div>
+        <label id="appointment-reason-label">Reason<textarea id="appointment-reason" minlength="3" maxlength="300" rows="3"></textarea></label>
+        <p id="appointment-dialog-error" role="alert"></p>
+        <div><button id="appointment-dialog-cancel" type="button" class="staff-secondary-button">Go back</button><button id="appointment-dialog-submit" type="submit" class="staff-primary-button">Confirm</button></div>
+      </form>
+    </dialog>
+    <script src="staff-dashboard.js"></script>
+  </body>
+</html>

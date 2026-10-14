@@ -19,7 +19,6 @@ function selectService(service, card) {
     item.setAttribute('aria-checked', String(selected));
   });
   document.querySelector('#confirm-service').textContent = service.name;
-  document.querySelector('#confirm-duration').textContent = `Approximately ${service.averageDurationMinutes} minutes per consultation`;
   updateJoinButton();
 }
 
@@ -36,12 +35,17 @@ function renderServices(services) {
     card.className = 'queue-service-option';
     card.setAttribute('role', 'radio');
     card.setAttribute('aria-checked', 'false');
-    card.innerHTML = '<span class="service-radio" aria-hidden="true"></span><span class="service-option-copy"><strong></strong><small></small></span><span class="service-time"></span>';
+    card.innerHTML = '<span class="service-radio" aria-hidden="true"></span><span class="service-option-copy"><strong></strong><small></small></span>';
     card.querySelector('strong').textContent = service.name;
     card.querySelector('small').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
-    card.querySelector('.service-time').textContent = `~${service.averageDurationMinutes} min`;
     const full = service.queueCapacity && Number(service.activePatients) >= Number(service.queueCapacity);
-    if (full) { card.disabled = true; card.querySelector('.service-time').textContent = 'Queue full'; }
+    if (full) {
+      card.disabled = true;
+      const status = document.createElement('span');
+      status.className = 'service-time';
+      status.textContent = 'Queue full';
+      card.append(status);
+    }
     card.addEventListener('click', () => selectService(service, card));
     if (service.id === requestedId) queueMicrotask(() => selectService(service, card));
     return card;
@@ -93,7 +97,7 @@ async function joinQueue() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'The queue could not be joined.');
-    status.textContent = `Queue number Q-${String(result.queue.queueNumber).padStart(3, '0')} confirmed. Opening your queue status…`;
+    status.textContent = `Queue number ${formatQueueTicket(result.queue.serviceId, result.queue.queueNumber)} confirmed. Opening your queue status…`;
     setTimeout(() => window.location.assign('/queue-status.html?joined=true'), 800);
   } catch (error) {
     status.textContent = error.message;

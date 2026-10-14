@@ -1,8 +1,12 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { requireRole } = require('../middleware/authentication');
+const { MODEL_VERSION, estimateLiveRemainingWait } = require('../services/waitPredictionService');
+const { formatQueueTicket } = require('../services/queueTicket');
 const { validProfilePicture } = require('../services/profilePictureService');
 const { hashPassword, verifyPassword, meetsPasswordRules } = require('../services/passwordService');
+const { validDate } = require('../services/appointmentService');
+const { generateStaffReportPdf } = require('../services/staffReportPdf');
 
 const router = express.Router();
 
@@ -59,13 +63,32 @@ router.get('/queues', ...requireRole('staff'), async (request, response) => {
     );
     const [entries] = await pool.execute(
       `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
+              TIMESTAMPDIFF(SECOND, q.joined_at, CURRENT_TIMESTAMP) AS elapsedQueueSeconds,
               q.called_at AS calledAt, q.consultation_started_at AS consultationStartedAt,
-              q.service_id AS serviceId, q.cancellation_reason AS cancellationReason, u.full_name AS patientName
+              q.service_id AS serviceId, q.cancellation_reason AS cancellationReason, u.full_name AS patientName,
+              s.average_duration_minutes AS averageDurationMinutes,
+              (SELECT COUNT(*) FROM queue_entries ahead
+               WHERE ahead.service_id = q.service_id AND ahead.queue_date = q.queue_date
+                 AND ahead.queue_number < q.queue_number AND ahead.status IN ('waiting','called','in_progress')) AS peopleAhead,
+              (SELECT COUNT(*) FROM queue_entries done
+               WHERE done.service_id = q.service_id AND done.queue_date = q.queue_date
+                 AND done.status = 'completed' AND done.completed_at >= CURRENT_TIMESTAMP - INTERVAL 30 MINUTE) AS completedLast30m,
+              (SELECT MAX(TIMESTAMPDIFF(SECOND, ahead.consultation_started_at, CURRENT_TIMESTAMP)) / 60.0
+               FROM queue_entries ahead
+               WHERE ahead.service_id = q.service_id AND ahead.queue_date = q.queue_date
+                 AND ahead.queue_number < q.queue_number AND ahead.status = 'in_progress'
+                 AND ahead.consultation_started_at IS NOT NULL) AS consultationElapsedMinutesAhead,
+              (SELECT estimated_minutes FROM waiting_time_predictions p
+               WHERE p.queue_entry_id = q.id ORDER BY p.predicted_at DESC LIMIT 1) AS estimatedMinutes,
+              (SELECT model_version FROM waiting_time_predictions p
+               WHERE p.queue_entry_id = q.id ORDER BY p.predicted_at DESC LIMIT 1) AS predictionModel
        FROM queue_entries q JOIN users u ON u.id = q.patient_id
+       JOIN clinic_services s ON s.id = q.service_id
        WHERE q.queue_date = CURRENT_DATE AND q.status IN ('waiting','called','in_progress','cancelled')
        ORDER BY q.service_id, FIELD(q.status, 'in_progress','called','waiting','cancelled'), q.queue_number`,
     );
-    return response.json({ services, entries });
+    return response.json({ services, entries: entries.map((entry) => entry.status === 'cancelled'
+      ? entry : { ...entry, ...estimateLiveRemainingWait(entry) }) });
   } catch (error) {
     return response.status(503).json({ error: 'Live queue data is temporarily unavailable.' });
   }
@@ -163,13 +186,85 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
     await connection.execute(
       `INSERT INTO staff_audit_logs (staff_id, action, entity_type, entity_id, details)
        VALUES (?, ?, 'queue_entry', ?, ?)`,
-      [request.user.id, `queue_${nextStatus}`, queueId, `Q-${String(entry.queueNumber).padStart(3, '0')} · ${entry.serviceName}`],
+      [request.user.id, `queue_${nextStatus}`, queueId, `${formatQueueTicket(entry.serviceId, entry.queueNumber)} · ${entry.serviceName}`],
     );
     await connection.commit();
-    return response.json({ message: `Queue Q-${String(entry.queueNumber).padStart(3, '0')} updated to ${nextStatus.replace('_', ' ')}.` });
+    return response.json({ message: `Queue ${formatQueueTicket(entry.serviceId, entry.queueNumber)} updated to ${nextStatus.replace('_', ' ')}.` });
   } catch (error) {
     if (connection) await connection.rollback();
     return response.status(503).json({ error: 'The queue status could not be updated.' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.post('/queues/:queueId/complete-and-call-next', ...requireRole('staff'), async (request, response) => {
+  const queueId = Number(request.params.queueId);
+  if (!Number.isSafeInteger(queueId) || queueId < 1) return response.status(422).json({ error: 'Provide a valid queue entry.' });
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT q.id, q.patient_id AS patientId, q.service_id AS serviceId, q.status,
+              q.queue_number AS queueNumber, s.name AS serviceName
+       FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id
+       WHERE q.id = ? AND q.queue_date = CURRENT_DATE FOR UPDATE`,
+      [queueId],
+    );
+    if (!rows.length) {
+      await connection.rollback();
+      return response.status(404).json({ error: 'Today’s queue entry was not found.' });
+    }
+    const entry = rows[0];
+    if (entry.status !== 'in_progress') {
+      await connection.rollback();
+      return response.status(409).json({ error: 'Only a consultation in progress can be completed.' });
+    }
+
+    const [waitingRows] = await connection.execute(
+      `SELECT id, patient_id AS patientId, queue_number AS queueNumber
+       FROM queue_entries
+       WHERE service_id = ? AND queue_date = CURRENT_DATE AND status = 'waiting'
+       ORDER BY queue_number LIMIT 1 FOR UPDATE`,
+      [entry.serviceId],
+    );
+    const next = waitingRows[0] || null;
+    await connection.execute("UPDATE queue_entries SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?", [queueId]);
+    await connection.execute(
+      `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
+       VALUES (?, ?, ?, ?, 'queue')`,
+      [entry.patientId, queueId, transitionDetails.completed.title, transitionDetails.completed.message],
+    );
+    await connection.execute(
+      `INSERT INTO staff_audit_logs (staff_id, action, entity_type, entity_id, details)
+       VALUES (?, 'queue_completed', 'queue_entry', ?, ?)`,
+      [request.user.id, queueId, `${formatQueueTicket(entry.serviceId, entry.queueNumber)} · ${entry.serviceName}`],
+    );
+    if (next) {
+      await connection.execute("UPDATE queue_entries SET status = 'called', called_at = CURRENT_TIMESTAMP WHERE id = ?", [next.id]);
+      await connection.execute(
+        `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
+         VALUES (?, ?, ?, ?, 'queue')`,
+        [next.patientId, next.id, transitionDetails.called.title, transitionDetails.called.message],
+      );
+      await connection.execute(
+        `INSERT INTO staff_audit_logs (staff_id, action, entity_type, entity_id, details)
+         VALUES (?, 'queue_called', 'queue_entry', ?, ?)`,
+        [request.user.id, next.id, `${formatQueueTicket(entry.serviceId, next.queueNumber)} · ${entry.serviceName}`],
+      );
+    }
+    await connection.commit();
+    const completedNumber = formatQueueTicket(entry.serviceId, entry.queueNumber);
+    const nextNumber = next ? formatQueueTicket(entry.serviceId, next.queueNumber) : null;
+    return response.json({
+      message: next ? `${completedNumber} completed and ${nextNumber} called.` : `${completedNumber} completed. No patient is waiting in this service.`,
+      calledQueueId: next?.id || null,
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return response.status(503).json({ error: 'The queue could not be advanced.' });
   } finally {
     if (connection) connection.release();
   }
@@ -180,6 +275,7 @@ router.get('/profile', ...requireRole('staff'), async (request, response) => {
     const [rows] = await pool.execute(`SELECT staff_code AS staffCode, full_name AS fullName, email,
       phone_number AS phone, profile_picture_url AS profilePictureUrl
       FROM users WHERE id = ? AND role = 'staff' LIMIT 1`, [request.user.id]);
+    if (!rows.length) return response.status(404).json({ error: 'Staff account not found.' });
     return response.json({ profile: rows[0] });
   } catch (error) { return response.status(503).json({ error: 'Staff profile is unavailable.' }); }
 });
@@ -190,7 +286,7 @@ router.patch('/profile', ...requireRole('staff'), async (request, response) => {
   const profilePictureUrl = String(request.body.profilePictureUrl || '').trim();
   if (fullName.length < 2 || fullName.length > 120 || phone.length < 7 || phone.length > 30
       || !validProfilePicture(profilePictureUrl)) {
-    return response.status(422).json({ error: 'Enter a valid name, contact number and optional picture URL.' });
+    return response.status(422).json({ error: 'Enter a valid name, contact number and optional picture.' });
   }
   try {
     await pool.execute(`UPDATE users SET full_name = ?, phone_number = ?, profile_picture_url = ?
@@ -200,7 +296,8 @@ router.patch('/profile', ...requireRole('staff'), async (request, response) => {
 });
 
 router.patch('/password', ...requireRole('staff'), async (request, response) => {
-  const currentPassword = String(request.body.currentPassword || ''); const newPassword = String(request.body.newPassword || '');
+  const currentPassword = String(request.body.currentPassword || '');
+  const newPassword = String(request.body.newPassword || '');
   if (!meetsPasswordRules(newPassword) || currentPassword === newPassword) return response.status(422).json({ error: 'Use a different strong password with at least 12 characters.' });
   try {
     const [rows] = await pool.execute("SELECT password_hash AS passwordHash FROM users WHERE id = ? AND role = 'staff'", [request.user.id]);
@@ -210,23 +307,80 @@ router.patch('/password', ...requireRole('staff'), async (request, response) => 
   } catch (error) { return response.status(503).json({ error: 'Password could not be changed.' }); }
 });
 
-router.get('/reports', ...requireRole('staff'), async (request, response) => {
-  const from = String(request.query.from || '');
-  const to = String(request.query.to || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
-    return response.status(422).json({ error: 'Choose a valid report start and end date.' });
-  }
-  try {
-    const [summary] = await pool.execute(`SELECT COUNT(*) AS totalPatients,
+async function loadStaffReport(from, to) {
+  const [summary] = await pool.execute(`SELECT COUNT(*) AS totalPatients,
       SUM(q.status = 'completed') AS completed, SUM(q.status = 'cancelled') AS cancelled,
       ROUND(AVG(CASE WHEN q.consultation_started_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, q.joined_at, q.consultation_started_at) END), 1) AS averageWaitMinutes,
       ROUND(AVG(CASE WHEN q.completed_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, q.consultation_started_at, q.completed_at) END), 1) AS averageConsultationMinutes
       FROM queue_entries q WHERE q.queue_date BETWEEN ? AND ?`, [from, to]);
-    const [services] = await pool.execute(`SELECT s.name AS serviceName, COUNT(q.id) AS patientCount,
+  const [services] = await pool.execute(`SELECT s.name AS serviceName, COUNT(q.id) AS patientCount,
       SUM(q.status = 'completed') AS completed FROM clinic_services s LEFT JOIN queue_entries q
       ON q.service_id = s.id AND q.queue_date BETWEEN ? AND ? GROUP BY s.id, s.name ORDER BY patientCount DESC, s.name`, [from, to]);
-    return response.json({ from, to, summary: summary[0], services });
+  const [predictionRows] = await pool.execute(`SELECT COUNT(*) AS measuredVisits,
+      SUM(p.model_version = ?) AS modelVisits,
+      SUM(p.model_version <> ?) AS fallbackVisits,
+      ROUND(AVG(CASE WHEN p.model_version = ? THEN ABS(p.estimated_minutes - p.actual_wait_minutes) END), 1) AS meanAbsoluteErrorMinutes,
+      SUM(CASE WHEN p.model_version = ? AND ABS(p.estimated_minutes - p.actual_wait_minutes) <= 5 THEN 1 ELSE 0 END) AS withinFiveMinutes
+      FROM queue_entries q JOIN waiting_time_predictions p ON p.queue_entry_id = q.id
+        AND p.id = (SELECT MAX(latest.id) FROM waiting_time_predictions latest WHERE latest.queue_entry_id = q.id)
+      WHERE q.queue_date BETWEEN ? AND ? AND q.consultation_started_at IS NOT NULL
+        AND p.actual_wait_minutes IS NOT NULL`, [MODEL_VERSION, MODEL_VERSION, MODEL_VERSION, MODEL_VERSION, from, to]);
+  const [predictionServices] = await pool.execute(`SELECT s.name AS serviceName, COUNT(*) AS measuredVisits,
+      ROUND(AVG(ABS(p.estimated_minutes - p.actual_wait_minutes)), 1) AS meanAbsoluteErrorMinutes,
+      SUM(ABS(p.estimated_minutes - p.actual_wait_minutes) <= 5) AS withinFiveMinutes
+      FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id
+      JOIN waiting_time_predictions p ON p.queue_entry_id = q.id
+        AND p.id = (SELECT MAX(latest.id) FROM waiting_time_predictions latest WHERE latest.queue_entry_id = q.id)
+      WHERE q.queue_date BETWEEN ? AND ? AND q.consultation_started_at IS NOT NULL
+        AND p.actual_wait_minutes IS NOT NULL AND p.model_version = ?
+      GROUP BY s.id, s.name ORDER BY measuredVisits DESC, s.name`, [from, to, MODEL_VERSION]);
+  const prediction = predictionRows[0] || {};
+  return {
+    from, to, summary: summary[0], services,
+    predictionPerformance: {
+      measuredVisits: Number(prediction.measuredVisits || 0),
+      modelVisits: Number(prediction.modelVisits || 0),
+      fallbackVisits: Number(prediction.fallbackVisits || 0),
+      meanAbsoluteErrorMinutes: prediction.meanAbsoluteErrorMinutes == null ? null : Number(prediction.meanAbsoluteErrorMinutes),
+      withinFiveMinutes: Number(prediction.withinFiveMinutes || 0),
+      services: predictionServices.map(service => ({
+        serviceName: service.serviceName,
+        measuredVisits: Number(service.measuredVisits || 0),
+        meanAbsoluteErrorMinutes: service.meanAbsoluteErrorMinutes == null ? null : Number(service.meanAbsoluteErrorMinutes),
+        withinFiveMinutes: Number(service.withinFiveMinutes || 0),
+      })),
+    },
+  };
+}
+
+function reportDates(request) {
+  const from = String(request.query.from || '');
+  const to = String(request.query.to || '');
+  return validDate(from) && validDate(to) && from <= to ? { from, to } : null;
+}
+
+router.get('/reports', ...requireRole('staff'), async (request, response) => {
+  const dates = reportDates(request);
+  if (!dates) return response.status(422).json({ error: 'Choose a valid report start and end date.' });
+  try {
+    return response.json(await loadStaffReport(dates.from, dates.to));
   } catch (error) { return response.status(503).json({ error: 'The staff report could not be generated.' }); }
+});
+
+router.get('/reports/pdf', ...requireRole('staff'), async (request, response) => {
+  const dates = reportDates(request);
+  if (!dates) return response.status(422).json({ error: 'Choose a valid report start and end date.' });
+  try {
+    const report = await loadStaffReport(dates.from, dates.to);
+    const pdf = await generateStaffReportPdf(report);
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="mediq-queue-report-${dates.from}-to-${dates.to}.pdf"`,
+      'Content-Length': pdf.length,
+      'Cache-Control': 'no-store',
+    });
+    return response.send(pdf);
+  } catch (error) { return response.status(503).json({ error: 'The PDF report could not be generated.' }); }
 });
 
 module.exports = router;

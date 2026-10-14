@@ -15,9 +15,18 @@ function verificationUrl(token) {
   return `${base}/verify-email.html?token=${encodeURIComponent(token)}`;
 }
 
+function useLocalEmailPreview() {
+  return process.env.NODE_ENV !== 'production'
+    && String(process.env.EMAIL_DELIVERY_MODE || '').trim().toLowerCase() === 'preview';
+}
+
+function previewResult(url) {
+  return { sent: false, previewUrl: process.env.NODE_ENV === 'production' ? null : url };
+}
+
 async function sendVerificationEmail({ email, fullName, token }) {
   const url = verificationUrl(token);
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return { sent: false, previewUrl: url };
+  if (useLocalEmailPreview() || !process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return previewResult(url);
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
@@ -39,7 +48,7 @@ async function sendVerificationEmail({ email, fullName, token }) {
 
 async function sendStaffWelcomeEmail({ email, fullName, staffCode, temporaryPassword, token }) {
   const url = verificationUrl(token);
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return { sent: false, previewUrl: url };
+  if (useLocalEmailPreview() || !process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return previewResult(url);
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),

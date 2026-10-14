@@ -6,6 +6,8 @@ const { hashPassword, verifyPassword, meetsPasswordRules } = require('../service
 const { validDate, futureSlot, lockBookings, hasConflict } = require('../services/appointmentService');
 
 const { validTime, slotIsOpen } = require('../services/clinicScheduleService');
+const { estimateLiveRemainingWait, predictInitialWait } = require('../services/waitPredictionService');
+const { formatQueueTicket } = require('../services/queueTicket');
 
 const router = express.Router();
 const activeStatuses = "'waiting','called','in_progress'";
@@ -24,11 +26,26 @@ function queueSelect(whereClause) {
   return `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
                  q.cancelled_at AS cancelledAt, q.cancellation_reason AS cancellationReason,
                  s.id AS serviceId, s.name AS serviceName,
+                 s.average_duration_minutes AS averageDurationMinutes,
                  (SELECT COUNT(*) FROM queue_entries ahead
                   WHERE ahead.service_id = q.service_id AND ahead.queue_date = q.queue_date
                     AND ahead.queue_number < q.queue_number AND ahead.status IN (${activeStatuses})) AS peopleAhead,
+                 (SELECT COUNT(*) FROM queue_entries done
+                  WHERE done.service_id = q.service_id AND done.queue_date = q.queue_date
+                    AND done.status = 'completed'
+                    AND done.completed_at >= CURRENT_TIMESTAMP - INTERVAL 30 MINUTE) AS completedLast30m,
+                 (SELECT MAX(TIMESTAMPDIFF(SECOND, ahead.consultation_started_at, CURRENT_TIMESTAMP)) / 60.0
+                  FROM queue_entries ahead
+                  WHERE ahead.service_id = q.service_id AND ahead.queue_date = q.queue_date
+                    AND ahead.queue_number < q.queue_number AND ahead.status = 'in_progress'
+                    AND ahead.consultation_started_at IS NOT NULL) AS consultationElapsedMinutesAhead,
                  (SELECT estimated_minutes FROM waiting_time_predictions p
-                  WHERE p.queue_entry_id = q.id ORDER BY p.predicted_at DESC LIMIT 1) AS estimatedMinutes
+                  WHERE p.queue_entry_id = q.id ORDER BY p.predicted_at DESC LIMIT 1) AS estimatedMinutes,
+                 (SELECT model_version FROM waiting_time_predictions p
+                  WHERE p.queue_entry_id = q.id ORDER BY p.predicted_at DESC LIMIT 1) AS predictionModel,
+                 (SELECT n.message FROM notifications n
+                  WHERE n.queue_entry_id = q.id AND n.title = 'Queue reminder'
+                  ORDER BY n.created_at DESC LIMIT 1) AS reminderMessage
           FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id
           WHERE ${whereClause}`;
 }
@@ -48,7 +65,7 @@ router.get('/overview', ...requireRole('patient'), async (request, response) => 
     );
     const [history] = await pool.execute(
       `SELECT q.id, q.queue_number AS queueNumber, q.queue_date AS queueDate, q.status,
-              s.name AS serviceName
+              s.id AS serviceId, s.name AS serviceName
        FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id
        WHERE q.patient_id = ? ORDER BY q.joined_at DESC LIMIT 3`,
       [request.user.id],
@@ -74,7 +91,7 @@ router.get('/overview', ...requireRole('patient'), async (request, response) => 
     );
     return response.json({
       user: request.user,
-      activeQueue: activeQueues[0] || null,
+      activeQueue: activeQueues[0] ? { ...activeQueues[0], ...estimateLiveRemainingWait(activeQueues[0]) } : null,
       services,
       recentQueues: history,
       nextAppointment: appointments[0] || null,
@@ -106,7 +123,8 @@ router.get('/queues/active', ...requireRole('patient'), async (request, response
        ORDER BY q.joined_at DESC LIMIT 1`,
       [request.user.id],
     );
-    return response.json({ queue: rows[0] || null });
+    const queue = rows[0] ? { ...rows[0], ...estimateLiveRemainingWait(rows[0]) } : null;
+    return response.json({ queue });
   } catch (error) {
     return response.status(503).json({ error: 'Queue status is temporarily unavailable.' });
   }
@@ -157,9 +175,17 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
     );
     const peopleAhead = Number(countRows[0].peopleAhead);
     if (services[0].queueCapacity && peopleAhead >= Number(services[0].queueCapacity)) {
-      await connection.rollback(); return response.status(409).json({ error: 'This queue has reached its patient capacity. Please choose another service or try later.' });
+      await connection.rollback();
+      return response.status(409).json({ error: 'This queue has reached its patient capacity. Please choose another service or try later.' });
     }
-    const estimatedMinutes = peopleAhead * Number(services[0].averageDurationMinutes);
+    const prediction = await predictInitialWait({
+      connection,
+      serviceId,
+      aheadCount: Math.max(0, queueNumber - 1),
+      baselineAheadCount: peopleAhead,
+      averageDurationMinutes: services[0].averageDurationMinutes,
+    });
+    const estimatedMinutes = prediction.estimatedMinutes;
     const [queueResult] = await connection.execute(
       `INSERT INTO queue_entries (patient_id, service_id, queue_date, queue_number, status)
        VALUES (?, ?, CURRENT_DATE, ?, 'waiting')`,
@@ -168,13 +194,13 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
     await connection.execute(
       `INSERT INTO waiting_time_predictions
        (queue_entry_id, estimated_minutes, model_version, people_ahead, service_duration_minutes, joined_hour, joined_weekday)
-       VALUES (?, ?, 'baseline-average-duration-v1', ?, ?, HOUR(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')), WEEKDAY(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')))`,
-      [queueResult.insertId, estimatedMinutes, peopleAhead, Number(services[0].averageDurationMinutes)],
+       VALUES (?, ?, ?, ?, ?, HOUR(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')), WEEKDAY(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')))`,
+      [queueResult.insertId, estimatedMinutes, prediction.modelVersion, peopleAhead, Number(services[0].averageDurationMinutes)],
     );
     await connection.execute(
       `INSERT INTO notifications (patient_id, queue_entry_id, title, message, notification_type)
        VALUES (?, ?, 'Queue joined', ?, 'queue')`,
-      [request.user.id, queueResult.insertId, `Your queue number for ${services[0].name} is Q-${String(queueNumber).padStart(3, '0')}.`],
+      [request.user.id, queueResult.insertId, `Your queue number for ${services[0].name} is ${formatQueueTicket(serviceId, queueNumber)}.`],
     );
     await connection.commit();
     return response.status(201).json({
@@ -182,10 +208,13 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
       queue: {
         id: queueResult.insertId,
         queueNumber,
+        serviceId,
         serviceName: services[0].name,
         status: 'waiting',
         peopleAhead,
         estimatedMinutes,
+        predictionModel: prediction.modelVersion,
+        predictionNotice: prediction.dataNotice,
       },
     });
   } catch (error) {
@@ -259,7 +288,7 @@ router.get('/history', ...requireRole('patient'), async (request, response) => {
     );
     const [items] = await pool.execute(
       `SELECT q.id, q.queue_number AS queueNumber, q.queue_date AS queueDate, q.joined_at AS joinedAt,
-              q.status, q.cancellation_reason AS cancellationReason, s.name AS serviceName
+              q.status, q.cancellation_reason AS cancellationReason, s.id AS serviceId, s.name AS serviceName
        FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id
        WHERE q.patient_id = ?${statusClause}
        ORDER BY q.joined_at DESC LIMIT ${limit} OFFSET ${offset}`,

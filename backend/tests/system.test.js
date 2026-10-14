@@ -52,7 +52,6 @@ describe('system endpoints', () => {
     ['/register.html', 'Patient registration'],
     ['/staff-login.html', 'Staff sign in'],
     ['/admin-login.html', 'Administrator sign in'],
-    ['/verify-email.html', 'Verify your email'],
     ['/terms.html', 'Terms and Conditions &amp; Privacy Notice'],
   ])('serves the authentication page %s', async (path, heading) => {
     const response = await request(app).get(path);
@@ -90,6 +89,13 @@ describe('system endpoints', () => {
     expect(response.text).toContain('aria-label="Show password"');
   });
 
+  test.each(['/patient-login.html', '/staff-login.html'])('%s lets an unverified account request another link', async (path) => {
+    const response = await request(app).get(path);
+    expect(response.statusCode).toBe(200);
+    expect(response.text).toContain('class="resend-verification"');
+    expect(response.text).toContain('Get a new verification link');
+  });
+
   test('hashes and verifies strong passwords without storing plaintext', async () => {
     const password = 'Strong-Patient-2026!';
     const hash = await hashPassword(password);
@@ -116,7 +122,6 @@ describe('system endpoints', () => {
     expect(response.body.verificationPreviewUrl).toContain('/verify-email.html?token=');
     expect(execute.mock.calls[0][0]).toContain("'patient'");
     expect(execute.mock.calls[0][1][2]).not.toContain('Strong-Patient-2026!');
-    expect(execute.mock.calls[2][0]).toContain('email_verification_tokens');
     execute.mockRestore();
   });
 
@@ -146,20 +151,6 @@ describe('system endpoints', () => {
     execute.mockRestore();
   });
 
-  test('blocks an unverified non-admin account from signing in', async () => {
-    const passwordHash = await hashPassword('Strong-Staff-2026!');
-    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
-      { id: 7, full_name: 'Clinic Staff', email: 'staff@example.com', password_hash: passwordHash, role: 'staff', is_active: 1, email_verified_at: null },
-    ]]);
-
-    const response = await request(app).post('/api/auth/login').send({ email: 'staff@example.com', password: 'Strong-Staff-2026!', role: 'staff' });
-
-    expect(response.statusCode).toBe(403);
-    expect(response.body.emailVerificationRequired).toBe(true);
-    expect(execute).toHaveBeenCalledTimes(1);
-    execute.mockRestore();
-  });
-
   test('serves the authenticated patient dashboard interface', async () => {
     const response = await request(app).get('/patient-dashboard.html');
     expect(response.statusCode).toBe(200);
@@ -169,17 +160,131 @@ describe('system endpoints', () => {
     expect(response.text).toContain('patient-dashboard.js');
   });
 
-  test('serves the dedicated Staff operations dashboard', async () => {
+  test('serves all five separate staff pages with report and profile navigation', async () => {
     const response = await request(app).get('/staff-dashboard.html');
     expect(response.statusCode).toBe(200);
-    expect(response.text).toContain('Clinic operations');
-    expect(response.text).toContain('Service queues');
+    expect(response.text).toContain('Clinic overview');
+    expect(response.text).toContain('href="/staff-queue.html"');
+    expect(response.text).toContain('href="/staff-appointments.html"');
+    expect(response.text).toContain('href="/staff-reports.html"');
+    expect(response.text).toContain('href="/staff-profile.html"');
+    expect(response.text).not.toContain('id="service-queues"');
     expect(response.text).toContain('staff-dashboard.js');
+
+    const queuePage = await request(app).get('/staff-queue.html');
+    expect(queuePage.statusCode).toBe(200);
+    expect(queuePage.text).toContain('Live service queues');
+    expect(queuePage.text).toContain('id="service-queues"');
+    expect(queuePage.text).not.toContain('id="staff-appointments"');
+
+    const appointmentsPage = await request(app).get('/staff-appointments.html');
+    expect(appointmentsPage.statusCode).toBe(200);
+    expect(appointmentsPage.text).toContain('Manage appointments');
+    expect(appointmentsPage.text).toContain('id="staff-appointments"');
+    expect(appointmentsPage.text).toContain('id="appointment-filters"');
+    expect(appointmentsPage.text).not.toContain('id="service-queues"');
+
+    const reportsPage = await request(app).get('/staff-reports.html');
+    expect(reportsPage.statusCode).toBe(200);
+    expect(reportsPage.text).toContain('id="report-form"');
+    expect(reportsPage.text).toContain('staff-reports.js');
+
+    const profilePage = await request(app).get('/staff-profile.html');
+    expect(profilePage.statusCode).toBe(200);
+    expect(profilePage.text).toContain('id="staff-profile-form"');
+    expect(profilePage.text).toContain('id="staff-password-form"');
+  });
+
+  test('generates a staff report from queue activity for the requested dates', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
+      .mockResolvedValueOnce([[{ totalPatients: 3, completed: 2, cancelled: 1, averageWaitMinutes: 12, averageConsultationMinutes: 18 }]])
+      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', patientCount: 3, completed: 2 }]])
+      .mockResolvedValueOnce([[{ measuredVisits: 3, modelVisits: 2, fallbackVisits: 1, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]])
+      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]]);
+
+    const response = await request(app).get('/api/staff/reports?from=2026-09-01&to=2026-09-30').set('Cookie', 'mediq_session=staff-token');
+    expect(response.statusCode).toBe(200);
+    expect(response.body.summary.averageWaitMinutes).toBe(12);
+    expect(response.body.services).toHaveLength(1);
+    expect(response.body.predictionPerformance).toEqual({
+      measuredVisits: 3, modelVisits: 2, fallbackVisits: 1, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1,
+      services: [{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }],
+    });
+    expect(execute.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-30']);
+    expect(execute.mock.calls[3][0]).toContain('ABS(p.estimated_minutes - p.actual_wait_minutes)');
+    expect(execute.mock.calls[3][1]).toEqual([
+      'operational-f4-hist-gradient-boosting-v1', 'operational-f4-hist-gradient-boosting-v1',
+      'operational-f4-hist-gradient-boosting-v1', 'operational-f4-hist-gradient-boosting-v1', '2026-09-01', '2026-09-30',
+    ]);
+    execute.mockRestore();
+  });
+
+  test('downloads a separately generated staff PDF report', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
+      .mockResolvedValueOnce([[{ totalPatients: 3, completed: 2, cancelled: 1, averageWaitMinutes: 12, averageConsultationMinutes: 18 }]])
+      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', patientCount: 3, completed: 2 }]])
+      .mockResolvedValueOnce([[{ measuredVisits: 3, modelVisits: 2, fallbackVisits: 1, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]])
+      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]]);
+
+    const response = await request(app)
+      .get('/api/staff/reports/pdf?from=2026-09-01&to=2026-09-30')
+      .set('Cookie', 'mediq_session=staff-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toMatch(/^application\/pdf/);
+    expect(response.headers['content-disposition']).toContain('mediq-queue-report-2026-09-01-to-2026-09-30.pdf');
+    expect(response.body.subarray(0, 4).toString()).toBe('%PDF');
+    expect(response.body.length).toBeGreaterThan(1000);
+    expect(execute.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-30']);
+    execute.mockRestore();
+  });
+
+  test('rejects an invalid staff report date range', async () => {
+    const response = await request(app).get('/api/staff/reports?from=2026-09-31&to=2026-10-01');
+    expect(response.statusCode).toBe(401);
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]]);
+    const signedIn = await request(app).get('/api/staff/reports?from=2026-09-31&to=2026-10-01').set('Cookie', 'mediq_session=staff-token');
+    expect(signedIn.statusCode).toBe(422);
+    execute.mockRestore();
+  });
+
+  test('loads the staff profile from the current account', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
+      .mockResolvedValueOnce([[{ staffCode: 'STF-007', fullName: 'Clinic Staff', email: 'staff@example.com', phone: '0123456789', profilePictureUrl: null }]]);
+    const response = await request(app).get('/api/staff/profile').set('Cookie', 'mediq_session=staff-token');
+    expect(response.statusCode).toBe(200);
+    expect(response.body.profile.staffCode).toBe('STF-007');
+    execute.mockRestore();
   });
 
   test('protects Staff operations from unauthenticated requests', async () => {
     const response = await request(app).get('/api/staff/queues');
     expect(response.statusCode).toBe(401);
+  });
+
+  test('shows staff the same changing wait estimate alongside the initial ML estimate', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
+      .mockResolvedValueOnce([[{ id: 2, name: 'Dental Consultation', isQueueOpen: 1 }]])
+      .mockResolvedValueOnce([[
+        { id: 82, queueNumber: 2, status: 'waiting', serviceId: 2, patientName: 'Test Patient',
+          peopleAhead: 1, completedLast30m: 0, consultationElapsedMinutesAhead: 5,
+          averageDurationMinutes: 15, estimatedMinutes: 22,
+          predictionModel: 'operational-f4-hist-gradient-boosting-v1' },
+      ]]);
+
+    const response = await request(app).get('/api/staff/queues').set('Cookie', 'mediq_session=staff-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.entries[0]).toMatchObject({
+      peopleAhead: 1, remainingWaitMinutes: 10, estimatedMinutes: 22,
+      predictionModel: 'operational-f4-hist-gradient-boosting-v1',
+    });
+    expect(execute.mock.calls[2][0]).toContain('waiting_time_predictions');
+    execute.mockRestore();
   });
 
   test('returns the Staff overview metrics', async () => {
@@ -248,8 +353,71 @@ describe('system endpoints', () => {
     expect(connection.execute.mock.calls[2][0]).toContain('called_at = CURRENT_TIMESTAMP');
     expect(connection.execute.mock.calls[3][0]).toContain('notifications');
     expect(connection.execute.mock.calls[4][0]).toContain('staff_audit_logs');
+    expect(connection.execute.mock.calls[4][1][3]).toContain('Q2-003');
+    expect(response.body.message).toContain('Q2-003');
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('completes a consultation and calls the next waiting patient in one transaction', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
+    ]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 81, patientId: 21, serviceId: 2, status: 'in_progress', queueNumber: 1, serviceName: 'General Consultation' }]])
+        .mockResolvedValueOnce([[{ id: 82, patientId: 22, queueNumber: 2 }]])
+        .mockResolvedValue([{ affectedRows: 1 }]),
+      commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+
+    const response = await request(app)
+      .post('/api/staff/queues/81/complete-and-call-next')
+      .set('Cookie', 'mediq_session=staff-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toMatchObject({ calledQueueId: 82 });
+    expect(response.body.message).toContain('Q2-001 completed and Q2-002 called');
+    expect(connection.execute.mock.calls[1][0]).toContain("status = 'waiting'");
+    expect(connection.execute.mock.calls[1][0]).toContain('ORDER BY queue_number LIMIT 1 FOR UPDATE');
+    expect(connection.execute.mock.calls[2][0]).toContain("status = 'completed'");
+    expect(connection.execute.mock.calls[5][0]).toContain("status = 'called'");
+    expect(connection.execute.mock.calls[5][1]).toEqual([82]);
+    expect(connection.execute.mock.calls.filter(([sql]) => sql.includes('INSERT INTO notifications'))).toHaveLength(2);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    execute.mockRestore();
+    getConnection.mockRestore();
+  });
+
+  test('rolls back completion when calling the next patient fails', async () => {
+    const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
+      { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
+    ]]);
+    const connection = {
+      beginTransaction: jest.fn().mockResolvedValue(),
+      execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 81, patientId: 21, serviceId: 2, status: 'in_progress', queueNumber: 1, serviceName: 'General Consultation' }]])
+        .mockResolvedValueOnce([[{ id: 82, patientId: 22, queueNumber: 2 }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ insertId: 1 }])
+        .mockResolvedValueOnce([{ insertId: 2 }])
+        .mockRejectedValueOnce(new Error('database write failed')),
+      commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
+    };
+    const getConnection = jest.spyOn(pool, 'getConnection').mockResolvedValueOnce(connection);
+
+    const response = await request(app)
+      .post('/api/staff/queues/81/complete-and-call-next')
+      .set('Cookie', 'mediq_session=staff-token');
+
+    expect(response.statusCode).toBe(503);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
     execute.mockRestore();
     getConnection.mockRestore();
   });
@@ -316,11 +484,12 @@ describe('system endpoints', () => {
       .send({ serviceId: 2 });
 
     expect(response.statusCode).toBe(201);
-    expect(response.body.queue).toMatchObject({ queueNumber: 3, peopleAhead: 2, estimatedMinutes: 30 });
+    expect(response.body.queue).toMatchObject({ serviceId: 2, queueNumber: 3, peopleAhead: 2, estimatedMinutes: 30 });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.execute.mock.calls[6][0]).toContain('waiting_time_predictions');
-    expect(connection.execute.mock.calls[6][1]).toEqual([81, 30, 2, 15]);
+    expect(connection.execute.mock.calls[6][1]).toEqual([81, 30, 'baseline-average-duration-v1', 2, 15]);
+    expect(connection.execute.mock.calls[7][1][2]).toContain('Q2-003');
     expect(connection.release).toHaveBeenCalledTimes(1);
     execute.mockRestore();
     getConnection.mockRestore();

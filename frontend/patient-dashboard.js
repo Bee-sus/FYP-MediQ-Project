@@ -31,11 +31,12 @@ function renderQueue(queue) {
     return;
   }
 
+  const estimate = queueEstimatePresentation(queue);
   container.className = 'queue-dashboard-card active-queue';
   container.innerHTML = `
     <div class="queue-identity">
       <span>${queue.serviceName}</span>
-      <strong>Q-${String(queue.queueNumber).padStart(3, '0')}</strong>
+      <strong>${formatQueueTicket(queue.serviceId, queue.queueNumber)}</strong>
       <small>Your queue number</small>
     </div>
     <a class="queue-details-link" href="/queue-status.html">View queue details →</a>
@@ -43,11 +44,12 @@ function renderQueue(queue) {
       <div><span>Status</span><strong>${statusLabels[queue.status] || queue.status}</strong></div>
       <div><span>People ahead</span><strong>${queue.peopleAhead}</strong></div>
       <div>
-        <span>Prototype estimate</span>
-        <strong>${queue.estimatedMinutes == null ? 'Calculating' : `~${Math.round(queue.estimatedMinutes)} min`}</strong>
+        <span>${estimate.waitLabel}</span>
+        <strong>${estimate.waitValue}</strong>
+        <small class="queue-estimated-clock">${estimate.clockText}</small>
       </div>
     </div>
-    <p class="estimate-explanation">Based on people ahead and the service’s average consultation duration. This is not yet an ML prediction.</p>
+    <p class="estimate-explanation">${queue.status === 'waiting' ? 'Your queue status updates automatically. Staff will call you when ready.' : 'Your queue status has updated.'}</p>
   `;
 }
 
@@ -64,12 +66,11 @@ function renderServices(services) {
     card.innerHTML = `
       <div><h3></h3><p></p></div>
       <div class="service-card-footer">
-        <span></span><a href="/join-queue.html"></a>
+        <a href="/join-queue.html"></a>
       </div>
     `;
     card.querySelector('h3').textContent = service.name;
     card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
-    card.querySelector('span').textContent = `Approx. ${service.averageDurationMinutes} min`;
     card.querySelector('a').href = `/join-queue.html?service=${service.id}`;
     card.querySelector('a').textContent = 'Select service';
     return card;
@@ -98,7 +99,7 @@ function renderHistory(items) {
     row.querySelector('strong').textContent = item.serviceName;
     row.querySelector('div span').textContent = formatDate(item.queueDate);
     row.querySelector('.history-status').textContent = statusLabels[item.status] || item.status;
-    row.querySelector('.history-number').textContent = `#${item.queueNumber}`;
+    row.querySelector('.history-number').textContent = formatQueueTicket(item.serviceId, item.queueNumber);
     return row;
   }));
 }

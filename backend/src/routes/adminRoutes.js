@@ -79,7 +79,9 @@ router.post('/staff', async (request, response) => {
       ? 'Staff account created and onboarding email sent.'
       : delivery.failed
         ? 'Staff account created, but the onboarding email failed to send. Check the SMTP settings and server log.'
-        : 'Staff account created. SMTP is not configured, so no email was sent.';
+        : delivery.previewUrl
+          ? 'Staff account created. Open the local verification link to finish setup.'
+          : 'Staff account created, but the onboarding email could not be sent.';
     return { status: 201, body: { message, staffId: result.insertId, credentials: { staffCode, fullName, email, temporaryPassword: password, emailSent: Boolean(delivery.sent), emailFailed: Boolean(delivery.failed), verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl } } };
   });
 });

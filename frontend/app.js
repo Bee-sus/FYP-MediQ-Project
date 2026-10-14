@@ -16,12 +16,8 @@ function createServiceCard(service) {
   const description = document.createElement('p');
   description.textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
 
-  const duration = document.createElement('span');
-  duration.className = 'service-duration';
-  duration.textContent = `Average duration: ${service.averageDurationMinutes} minutes`;
-
   header.append(name, availability);
-  card.append(header, description, duration);
+  card.append(header, description);
   return card;
 }
 

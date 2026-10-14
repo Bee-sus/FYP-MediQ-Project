@@ -180,7 +180,7 @@ test('availability returns no slots on a special closure date', async () => {
 });
 
 test('staff cancellation records a reason and is terminal', async () => {
-  entry = { id: 44, patientId: 7, status: 'waiting', queueNumber: 1, serviceName: 'Consultation' };
+  entry = { id: 44, patientId: 7, serviceId: 1, status: 'waiting', queueNumber: 1, serviceName: 'Consultation' };
   const result = await request(app).patch('/api/staff/queues/44/status').set('Cookie', 'mediq_session=test')
     .send({ status: 'cancelled', reason: 'Patient cannot attend' });
   expect(result.status).toBe(200);

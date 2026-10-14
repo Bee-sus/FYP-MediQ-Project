@@ -1,9 +1,12 @@
 node_modules/
 .env
 coverage/
+.jest-cache/
 *.log
 ml-service/.venv/
 __pycache__/
 *.py[cod]
 ml-service/models/*.joblib
 !ml-service/models/.gitkeep
+!ml-service/models/synthetic_queue_wait_model.joblib
+!ml-service/models/operational_wait_f4_model.joblib

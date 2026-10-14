@@ -49,7 +49,10 @@ router.post('/register', async (request, response) => {
     let delivery;
     try { delivery = await sendVerificationEmail({ email: values.email, fullName: values.name, token }); }
     catch (error) { delivery = { sent: false, previewUrl: null }; }
-    return response.status(201).json({ message: delivery.sent ? 'Account created. Check your email to verify your address.' : 'Account created. Email delivery is not configured; use the development verification link.', userId: result.insertId, requiresVerification: true, verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
+    const message = delivery.sent ? 'Account created. Check your email to verify your address.'
+      : delivery.previewUrl ? 'Account created. Open the local verification link to continue.'
+        : 'Account created, but the verification email could not be sent. Check the mail settings.';
+    return response.status(201).json({ message, userId: result.insertId, requiresVerification: true, verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') return response.status(409).json({ error: 'An account already uses this email address.', fields: { email: 'Email address is already registered.' } });
     return response.status(503).json({ error: 'Registration is unavailable. Check the database connection and try again.' });
@@ -101,7 +104,10 @@ router.post('/resend-verification', async (request, response) => {
     if (!rows.length || rows[0].verifiedAt) return response.json({ message: 'If an unverified account exists, a new verification email has been prepared.' });
     const token = await createVerificationToken(pool, rows[0].id); let delivery;
     try { delivery = await sendVerificationEmail({ email, fullName: rows[0].fullName, token }); } catch (error) { delivery = { sent: false, previewUrl: null }; }
-    return response.json({ message: delivery.sent ? 'Verification email sent.' : 'Email delivery is not configured; use the development verification link.', verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
+    const message = delivery.sent ? 'Verification email sent.'
+      : delivery.previewUrl ? 'Open the local verification link to continue.'
+        : 'The verification email could not be sent. Check the mail settings.';
+    return response.json({ message, verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
   } catch (error) { return response.status(503).json({ error: 'Verification email could not be resent.' }); }
 });
 

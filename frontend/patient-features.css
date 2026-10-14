@@ -79,7 +79,7 @@
 .feature-service-card {
   padding: 24px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   gap: 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -111,11 +111,6 @@
   line-height: 1.6;
 }
 
-.service-duration-pill {
-  color: var(--blue-dark);
-  font-size: 10px;
-  font-weight: 700;
-}
 
 .feature-service-actions {
   grid-column: 2 / -1;
@@ -588,10 +583,6 @@
 
   .feature-service-card {
     grid-template-columns: auto 1fr;
-  }
-
-  .service-duration-pill {
-    grid-column: 2;
   }
 
   .feature-service-actions {

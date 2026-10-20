@@ -1,10 +1,27 @@
 fetch('/api/settings').then(response => response.json()).then(data => {
   document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; });
 }).catch(() => {});
-const statusLabels = { waiting: 'Waiting', called: 'Called', in_progress: 'In consultation', cancelled: 'Cancelled' };
-const actionLabels = { called: 'Call patient', in_progress: 'Start consultation', completed: 'Complete', complete_and_call_next: 'Complete & call next', cancelled: 'Cancel queue' };
+const statusLabels = { not_present: 'Not present', waiting: 'Waiting', called: 'Called', in_progress: 'In consultation', cancelled: 'Cancelled' };
+const actionLabels = { not_present: 'Not present', called: 'Call patient', in_progress: 'Start consultation', completed: 'Complete', complete_and_call_next: 'Complete & call next', cancelled: 'Cancel queue' };
 const staffPage = document.body.dataset.staffPage;
 if (staffPage === 'overview' && window.location.hash === '#profile') window.location.replace('/staff-profile.html');
+const staffAlerts = staffPage === 'queue' ? window.createQueueAlerts('staff', document.querySelector('#queue-alert-controls')) : null;
+let queueSnapshot = null;
+let previousQueueEntries = null;
+function visibleQueueEntry(entry) {
+  return window.matchesQueueFilter ? window.matchesQueueFilter(entry, document.querySelector('#queue-search')?.value, document.querySelector('#queue-filter')?.value) : matchesQueueFilter(entry, document.querySelector('#queue-search')?.value, document.querySelector('#queue-filter')?.value);
+}
+function renderQueueSnapshot() {
+  if (!queueSnapshot) return;
+  document.querySelector('#service-queues').replaceChildren(...queueSnapshot.services.map(service => servicePanel(service, queueSnapshot.entries.filter(entry => Number(entry.serviceId) === Number(service.id)))));
+  const count = queueSnapshot.entries.filter(visibleQueueEntry).length;
+  document.querySelector('#queue-filter-count').textContent = count + ' matching entries';
+}
+if (staffPage === 'queue') {
+  document.querySelector('#queue-search').addEventListener('input', renderQueueSnapshot);
+  document.querySelector('#queue-filter').addEventListener('change', renderQueueSnapshot);
+  document.querySelector('#clear-queue-filters').addEventListener('click', () => { document.querySelector('#queue-search').value = ''; document.querySelector('#queue-filter').value = ''; renderQueueSnapshot(); });
+}
 let queueLoadVersion = 0;
 let queueMutationPending = false;
 let lastReminderSignature = null;
@@ -36,11 +53,16 @@ async function staffApi(path, options = {}) {
   return data;
 }
 
-function showAlert(message, type = 'success') {
+function showAlert(message, type = 'success', retryAction = null) {
   const alert = document.querySelector('#staff-alert');
   alert.textContent = message;
   alert.className = `staff-alert ${type}`;
+  alert.setAttribute('role', type === 'error' ? 'alert' : 'status');
   alert.hidden = false;
+  if (retryAction) {
+    const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Try again';
+    retry.addEventListener('click', retryAction); alert.append(' ', retry);
+  }
 }
 
 function summaryCard(label, value, note, tone = '') {
@@ -56,7 +78,7 @@ function summaryCard(label, value, note, tone = '') {
 function renderSummary(summary) {
   const container = document.querySelector('#staff-summary');
   container.replaceChildren(
-    summaryCard('Waiting', summary.waiting, 'Patients awaiting call', 'blue'),
+    summaryCard('Waiting', summary.waiting, `${summary.notPresent || 0} not present · awaiting recall`, 'blue'),
     summaryCard('Active care', summary.called + summary.inProgress, `${summary.called} called · ${summary.inProgress} consulting`, 'amber'),
     summaryCard('Completed', summary.completed, 'Consultations today', 'green'),
     summaryCard('Pending appointments', summary.pendingAppointments, 'Awaiting staff decision', 'violet'),
@@ -66,7 +88,8 @@ function renderSummary(summary) {
 
 function actionsFor(status, hasWaiting) {
   if (status === 'waiting') return ['called', 'cancelled'];
-  if (status === 'called') return ['in_progress', 'cancelled'];
+  if (status === 'called') return ['in_progress', 'not_present', 'cancelled'];
+  if (status === 'not_present') return ['called', 'cancelled'];
   if (status === 'in_progress') return hasWaiting ? ['complete_and_call_next', 'completed'] : ['completed'];
 
   return [];
@@ -149,38 +172,104 @@ function queueRow(entry, isFirstWaiting, hasWaiting, serviceName, canCall) {
     mlNote.textContent = `At joining · ${isMlEstimate ? 'ML' : 'Average'} ~${Math.round(entry.estimatedMinutes)} min`;
     mlNote.title = isMlEstimate ? 'Initial F4 model estimate at joining; not validated for this clinic.' : 'Initial average-duration estimate at joining.';
   }
+  const arrival = document.createElement('small');
+  arrival.className = 'arrival-badge';
+  arrival.textContent = entry.arrivedAt ? 'At clinic' : entry.joinLocation === 'remote' ? 'Remote · not arrived' : 'Arrival unconfirmed';
+  row.querySelector('.patient-details').append(arrival);
+  const identityNote = document.createElement('small');
+  identityNote.textContent = [entry.patientAge == null ? null : `Age ${entry.patientAge}`, entry.maskedIdentification ? `${entry.identificationType === 'mykad' ? 'MyKad' : 'Passport'} ${entry.maskedIdentification}` : null].filter(Boolean).join(' · ');
+  if (identityNote.textContent) row.querySelector('.patient-details').append(identityNote);
+  if (!entry.arrivedAt && ['waiting', 'called', 'not_present'].includes(entry.status)) {
+    const checkIn = document.createElement('button'); checkIn.type = 'button';
+    checkIn.className = 'staff-secondary-button'; checkIn.textContent = 'Confirm arrival';
+    checkIn.addEventListener('click', async () => {
+      if (queueMutationPending) return;
+      const confirmed = await window.mediqDialog({ title: 'Confirm patient arrival?', message: entry.patientName + ' is physically at the clinic.', confirmLabel: 'Confirm arrival' });
+      if (!confirmed || queueMutationPending) return;
+      queueMutationPending = true; checkIn.disabled = true; checkIn.textContent = 'Checking in…';
+      try { const result = await staffApi('/api/staff/queues/' + entry.id + '/arrive', { method: 'POST' }); showAlert(result.message); await loadStaffDashboard(true); }
+      catch (error) { showAlert(error.message, 'error'); }
+      finally { queueMutationPending = false; checkIn.disabled = false; checkIn.textContent = 'Confirm arrival'; }
+    });
+    row.querySelector('.queue-actions').append(checkIn);
+  }
   if (entry.cancellationReason) row.querySelector('.patient-details span').textContent += ` · Reason: ${entry.cancellationReason}`;
   const actions = row.querySelector('.queue-actions');
   actionsFor(entry.status, hasWaiting).filter((nextStatus) => nextStatus !== 'called' || entry.status !== 'waiting' || isFirstWaiting).forEach((nextStatus) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = nextStatus === 'cancelled' ? 'staff-text-button' : nextStatus === 'completed' ? 'staff-secondary-button' : 'staff-primary-button';
-    button.textContent = actionLabels[nextStatus];
-    if (nextStatus === 'called' && !canCall) {
+    button.dataset.queueAction = nextStatus;
+    button.textContent = entry.status === 'not_present' && nextStatus === 'called' ? 'Recall patient' : actionLabels[nextStatus];
+    if (nextStatus === 'called' && (!canCall || (entry.status === 'not_present' && !entry.arrivedAt))) {
       button.disabled = true;
-      button.title = 'Finish the current patient before calling the next one.';
+      button.title = entry.status === 'not_present' && !entry.arrivedAt ? 'Confirm arrival before recalling this patient.' : 'Finish the current patient before calling the next one.';
     }
     button.addEventListener('click', async () => {
-      const reason = nextStatus === 'cancelled' ? window.prompt('Reason for cancelling this queue entry (3–300 characters):') : '';
+      if (queueMutationPending) return;
+      const reason = nextStatus === 'cancelled' ? await window.mediqDialog({ title: 'Cancel queue entry?', message: `${entry.patientName} (${row.querySelector('.staff-queue-number').textContent}) will be removed from the queue and notified.`, confirmLabel: 'Cancel entry', reason: true, danger: true }) : '';
       if (nextStatus === 'cancelled' && reason === null) return;
       const combined = nextStatus === 'complete_and_call_next';
-      const confirmed = await confirmAction(`${actionLabels[nextStatus]}?`, combined
+      const confirmed = nextStatus === 'cancelled' || await confirmAction(`${actionLabels[nextStatus]}?`, combined
         ? `${entry.patientName} will be marked completed, and the earliest waiting patient in ${serviceName} will be called. Both patients will be notified.`
-        : `${entry.patientName} (${row.querySelector('.staff-queue-number').textContent}) will be moved from ${statusLabels[entry.status].toLowerCase()} to ${nextStatus === 'in_progress' ? 'in consultation' : nextStatus}. The patient will be notified.`);
-      if (!confirmed) return;
+        : nextStatus === 'not_present' ? 'This patient will be marked not present and notified. Their ticket remains active, but the waiting queue can continue. Confirm arrival before recalling them.' : `${entry.patientName} (${row.querySelector('.staff-queue-number').textContent}) will be moved from ${statusLabels[entry.status].toLowerCase()} to ${nextStatus === 'in_progress' ? 'in consultation' : nextStatus}. The patient will be notified.`);
+      if (!confirmed || queueMutationPending) return;
+      const controls = [...document.querySelectorAll('#service-queues button')].map(control => [control, control.disabled]);
+      controls.forEach(([control]) => { control.disabled = true; });
+      button.textContent = nextStatus === 'called' ? 'Calling…' : nextStatus === 'cancelled' ? 'Cancelling…' : nextStatus === 'in_progress' ? 'Starting…' : 'Completing…';
+      button.setAttribute('aria-busy', 'true');
       try {
         queueMutationPending = true;
         const result = combined
           ? await staffApi(`/api/staff/queues/${entry.id}/complete-and-call-next`, { method: 'POST' })
           : await staffApi(`/api/staff/queues/${entry.id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: nextStatus, reason }) });
         showAlert(result.message);
-        await loadStaffDashboard();
+        await loadStaffDashboard(true);
       } catch (error) { showAlert(error.message, 'error'); }
-      finally { queueMutationPending = false; }
+      finally { queueMutationPending = false; controls.forEach(([control, disabled]) => { control.disabled = disabled; }); button.textContent = actionLabels[nextStatus]; button.removeAttribute('aria-busy'); }
     });
     actions.append(button);
   });
+  const primary = [...actions.querySelectorAll('[data-queue-action]')].find(button => !['cancelled', 'not_present'].includes(button.dataset.queueAction));
+  if (primary) { primary.className = 'staff-primary-button'; primary.classList.add('queue-main-action'); }
+  const secondary = [...actions.querySelectorAll('button')].filter(button => button !== primary);
+  if (secondary.length) {
+    const more = document.createElement('details'); more.className = 'queue-more';
+    const summary = document.createElement('summary'); summary.textContent = 'More actions';
+    const menu = document.createElement('div'); menu.className = 'queue-more-actions';
+    secondary.forEach(button => { menu.append(button); });
+    more.append(summary, menu); actions.append(more);
+  }
   return row;
+}
+
+function openServiceNotice(service) {
+  if (queueMutationPending || document.querySelector('dialog[open]')) return;
+  const dialog = document.createElement('dialog'); dialog.className = 'staff-dialog service-notice-dialog portal-form-dialog'; dialog.setAttribute('aria-labelledby', 'notice-editor-title');
+  dialog.innerHTML = '<form class="dialog-form-layout"><header class="dialog-form-header"><h2 id="notice-editor-title">Service delay notice</h2><p class="notice-service-name"></p><p>This update informs patients. Use Close queue separately to stop new joins.</p></header><div class="dialog-form-body"><label>Quick message<select><option value="">Choose a quick message</option><option value="Doctor delayed. Please allow extra waiting time.">Doctor delayed</option><option value="Service temporarily paused. Please wait for a further update.">Service temporarily paused</option><option value="Consultations are taking longer than usual.">Longer consultations</option></select></label><label>Message for patients<textarea rows="3" maxlength="300"></textarea></label><p class="notice-error" role="alert"></p></div><footer class="dialog-form-footer"><button type="button" class="staff-secondary-button notice-back">Go back</button><button type="button" class="staff-secondary-button notice-clear">Clear notice</button><button type="submit" class="staff-primary-button">Publish notice</button></footer></form>';
+  dialog.querySelector('.notice-service-name').textContent = service.name;
+  const input = dialog.querySelector('textarea'); input.value = service.delayNotice || '';
+  dialog.querySelector('select').addEventListener('change', event => { if (event.target.value) input.value = event.target.value; });
+  dialog.querySelector('.notice-back').addEventListener('click', () => dialog.close());
+  let saving = false;
+  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  async function save(notice) {
+    if (saving || queueMutationPending) return;
+    const error = dialog.querySelector('.notice-error');
+    if (notice.length && notice.length < 3) { error.textContent = 'Use at least 3 characters, or clear the notice.'; return; }
+    saving = true; queueMutationPending = true;
+    dialog.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    error.textContent = 'Saving…';
+    try {
+      const result = await staffApi('/api/staff/services/' + service.id + '/notice', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notice }) });
+      dialog.close(); showAlert(result.message); await loadStaffDashboard(true);
+    } catch (failure) { error.textContent = failure.message; }
+    finally { saving = false; queueMutationPending = false; dialog.querySelectorAll('button').forEach(button => { button.disabled = false; }); }
+  }
+  dialog.querySelector('form').addEventListener('submit', event => { event.preventDefault(); save(input.value.trim()); });
+  dialog.querySelector('.notice-clear').addEventListener('click', () => save(''));
+  document.body.append(dialog); dialog.showModal(); input.focus();
 }
 
 function servicePanel(service, entries) {
@@ -197,17 +286,22 @@ function servicePanel(service, entries) {
   const toggle = panel.querySelector('.queue-toggle');
   toggle.textContent = service.isQueueOpen ? 'Close queue' : 'Open queue';
   toggle.addEventListener('click', async () => {
+    if (queueMutationPending) return;
     const nextState = !Boolean(service.isQueueOpen);
     const confirmed = await confirmAction(`${nextState ? 'Open' : 'Close'} ${service.name}?`, nextState ? 'Patients will be able to join this service queue.' : 'New patients will be prevented from joining. Existing patients remain in the queue.');
-    if (!confirmed) return;
+    if (!confirmed || queueMutationPending) return;
+    toggle.disabled = true; toggle.textContent = nextState ? 'Opening…' : 'Closing…';
     try {
       queueMutationPending = true;
       const result = await staffApi(`/api/staff/services/${service.id}/queue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isOpen: nextState }) });
       showAlert(result.message);
-      await loadStaffDashboard();
+      await loadStaffDashboard(true);
     } catch (error) { showAlert(error.message, 'error'); }
-    finally { queueMutationPending = false; }
+    finally { queueMutationPending = false; toggle.disabled = false; toggle.textContent = service.isQueueOpen ? 'Close queue' : 'Open queue'; }
   });
+  const notice = document.createElement('p'); notice.className = 'service-delay-notice'; notice.hidden = !service.delayNotice; notice.textContent = service.delayNotice ? 'Service update: ' + service.delayNotice : ''; panel.querySelector('header').after(notice);
+  const editNotice = document.createElement('button'); editNotice.type = 'button'; editNotice.className = 'staff-secondary-button'; editNotice.textContent = service.delayNotice ? 'Edit delay notice' : 'Add delay notice';
+  editNotice.addEventListener('click', () => openServiceNotice(service)); panel.querySelector('header').append(editNotice);
   const list = panel.querySelector('.service-queue-list');
   const firstWaiting = activeEntries.find((entry) => entry.status === 'waiting');
   const firstWaitingId = firstWaiting?.id;
@@ -226,36 +320,44 @@ function servicePanel(service, entries) {
         : 'Review this patient and call when the clinician is ready.';
     }
   }
-  if (activeEntries.length) list.replaceChildren(...activeEntries.map((entry) => queueRow(entry, entry.id === firstWaitingId, Boolean(firstWaitingId), service.name, !busy)));
-  else list.innerHTML = '<div class="staff-empty"><strong>No active patients</strong><span>This service queue is clear.</span></div>';
+  const matchingEntries = activeEntries.filter(visibleQueueEntry);
+  if (matchingEntries.length) list.replaceChildren(...matchingEntries.map((entry) => queueRow(entry, entry.id === firstWaitingId, Boolean(firstWaitingId), service.name, !busy)));
+  else { list.textContent = activeEntries.length ? 'No patients match these filters.' : 'No active patients in this service.'; list.classList.add('staff-empty'); }
   const cancelledList = panel.querySelector('.cancelled-queue-list');
-  if (cancelledEntries.length) {
+  if (cancelledEntries.filter(visibleQueueEntry).length) {
     cancelledList.hidden = false;
     cancelledList.querySelector('summary').textContent = `${cancelledEntries.length} cancelled today`;
-    cancelledList.querySelector('div').replaceChildren(...cancelledEntries.map((entry) => queueRow(entry, false, false, service.name, false)));
+    cancelledList.querySelector('div').replaceChildren(...cancelledEntries.filter(visibleQueueEntry).map((entry) => queueRow(entry, false, false, service.name, false)));
   }
   return panel;
 }
 
-async function loadStaffDashboard() {
+async function loadStaffDashboard(afterMutation = false) {
   const loadVersion = ++queueLoadVersion;
   try {
     const [overview, queueData] = await Promise.all([
       staffApi('/api/staff/overview'),
       staffPage === 'queue' ? staffApi('/api/staff/queues') : Promise.resolve(null),
     ]);
-    if (loadVersion !== queueLoadVersion) return;
+    if (loadVersion !== queueLoadVersion || document.querySelector('dialog[open]') || (queueMutationPending && !afterMutation)) return;
     document.querySelector('#staff-name').textContent = overview.user.fullName;
     if (staffPage === 'overview') renderSummary(overview.summary);
     if (staffPage === 'queue') {
-      const container = document.querySelector('#service-queues');
-      container.replaceChildren(...queueData.services.map((service) => servicePanel(service, queueData.entries.filter((entry) => Number(entry.serviceId) === Number(service.id)))));
+      queueSnapshot = queueData; renderQueueSnapshot();
+      if (previousQueueEntries) {
+        const attention = queueData.entries.filter(entry => {
+          const previous = previousQueueEntries.get(entry.id);
+          return (!previous && entry.status === 'waiting') || (entry.arrivedAt && !previous?.arrivedAt) || (estimateReached(entry) && !estimateReached(previous || {}));
+        });
+        if (attention.length) staffAlerts.notify(attention.map(entry => entry.id + ':' + entry.status + ':' + (entry.arrivedAt || '') + ':' + estimateReached(entry)).sort().join('|'), 'MediQ queue update', attention.length + ' queue entries need review. Open Live queue.');
+      }
+      previousQueueEntries = new Map(queueData.entries.map(entry => [entry.id, entry]));
       renderQueueReminders(queueData.entries);
     }
     const updated = document.querySelector('#last-updated');
     if (updated) updated.textContent = `Updated ${new Intl.DateTimeFormat('en-MY', { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date())}`;
   } catch (error) {
-    if (loadVersion === queueLoadVersion && error.message !== 'Staff sign-in required.') showAlert(error.message, 'error');
+    if (loadVersion === queueLoadVersion && error.message !== 'Staff sign-in required.') showAlert('Queue information could not refresh. Displayed information may be out of date.', 'error', () => loadStaffDashboard());
   }
 }
 
@@ -272,10 +374,10 @@ document.querySelector('#logout-button').addEventListener('click', async () => {
 if (staffPage !== 'profile') loadStaffDashboard();
 if (staffPage === 'queue') {
   window.setInterval(() => {
-    if (!document.hidden && !queueMutationPending && !document.querySelector('#staff-confirmation').open) loadStaffDashboard();
+    if ((!document.hidden || staffAlerts?.backgroundEnabled) && !queueMutationPending && !document.querySelector('dialog[open]')) loadStaffDashboard();
   }, 20000);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) loadStaffDashboard();
+    if (!document.hidden && !queueMutationPending && !document.querySelector('dialog[open]')) loadStaffDashboard();
   });
 }
 

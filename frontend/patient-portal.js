@@ -10,7 +10,7 @@ const pageDetails = {
 
 function navigationLink(key, href, symbol, label) {
   const active = page === key ? ' class="active" aria-current="page"' : '';
-  return `<a${active} href="${href}"><span aria-hidden="true">${symbol}</span>${label}</a>`;
+  return `<a${active} href="${href}"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#${key === 'status' ? 'queue' : key}"></use></svg>${label}</a>`;
 }
 
 function renderShell() {
@@ -52,6 +52,7 @@ function showAlert(message, type = 'success') {
   const alert = document.querySelector('#page-alert');
   alert.textContent = message;
   alert.className = `dashboard-alert ${type}`;
+  alert.setAttribute('role', type === 'error' ? 'alert' : 'status');
   alert.hidden = false;
 }
 
@@ -82,11 +83,13 @@ async function identifyPatient() {
 }
 
 function createServiceCard(service) {
+  const availability = describeQueueAvailability(service);
   const card = document.createElement('article');
   card.className = 'feature-service-card';
+  card.dataset.queueStatus = availability.status;
   card.innerHTML = `
     <div class="feature-service-icon" aria-hidden="true">+</div>
-    <div class="feature-service-copy"><h2></h2><p></p></div>
+    <div class="feature-service-copy"><h2></h2><p></p><div class="service-availability"><span class="queue-load-badge"></span><strong class="service-availability-wait"></strong><small class="service-availability-count"></small></div><p class="service-availability-advice"></p></div>
     <div class="feature-service-actions">
       <a class="secondary-card-action">Book appointment</a>
       <a class="primary-card-action">Join queue</a>
@@ -94,16 +97,26 @@ function createServiceCard(service) {
   `;
   card.querySelector('h2').textContent = service.name;
   card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
+  card.querySelector('.queue-load-badge').textContent = availability.label;
+  card.querySelector('.service-availability-wait').textContent = availability.waitText;
+  card.querySelector('.service-availability-count').textContent = `${availability.activePatients} ${availability.activePatients === 1 ? 'patient' : 'patients'} ahead`;
+  card.querySelector('.service-availability-advice').textContent = service.delayNotice ? `Service update: ${service.delayNotice} · Waiting times may change.` : availability.advice;
   card.querySelector('.secondary-card-action').href = `/appointments.html?service=${service.id}`;
-  card.querySelector('.primary-card-action').href = `/join-queue.html?service=${service.id}`;
+  const joinLink = card.querySelector('.primary-card-action');
+  if (availability.status === 'closed' || availability.status === 'full') {
+    joinLink.removeAttribute('href');
+    joinLink.setAttribute('aria-disabled', 'true');
+    joinLink.textContent = 'Queue unavailable';
+  } else joinLink.href = `/join-queue.html?service=${service.id}`;
   return card;
 }
 
 async function loadServicesPage() {
-  const data = await api('/api/patient/services');
+  const data = await api('/api/patient/queues/availability');
   const content = document.querySelector('#page-content');
   content.className = 'feature-services-grid';
-  content.replaceChildren(...data.services.map(createServiceCard));
+  if (data.services.length) content.replaceChildren(...data.services.map(createServiceCard));
+  else content.innerHTML = '<p class="feature-empty">No clinic services are available right now.</p>';
 }
 
 function historyRow(item) {
@@ -120,7 +133,7 @@ function historyRow(item) {
   row.querySelector('.history-main h2').textContent = item.serviceName;
   row.querySelector('.history-main p').textContent = `Queue ${formatQueueTicket(item.serviceId, item.queueNumber)}${item.cancellationReason ? ` · Reason: ${item.cancellationReason}` : ''}`;
   const status = row.querySelector('.record-status');
-  status.textContent = item.status.replace('_', ' ');
+  status.textContent = item.status === 'not_present' ? 'Not present' : item.status === 'in_progress' ? 'In consultation' : item.status.replace('_', ' ');
   status.dataset.status = item.status;
   return row;
 }
@@ -174,12 +187,15 @@ function appointmentCard(item) {
   const cancel = card.querySelector('.cancel-appointment');
   cancel.hidden = !['pending', 'approved'].includes(item.status);
   cancel.addEventListener('click', async () => {
-    if (!window.confirm('Cancel this appointment request?')) return;
+    if (!(await window.mediqDialog({ title: 'Cancel appointment?', message: 'Your appointment request will be cancelled and its slot released.', confirmLabel: 'Cancel appointment', danger: true }))) return;
+    if (cancel.disabled) return;
+    cancel.disabled = true; cancel.textContent = 'Cancelling…';
     try {
       const result = await api(`/api/patient/appointments/${item.id}/cancel`, { method: 'POST' });
       showAlert(result.message);
       await loadAppointmentsPage();
     } catch (error) { showAlert(error.message, 'error'); }
+    finally { cancel.disabled = false; cancel.textContent = 'Cancel appointment'; }
   });
   if (item.status === 'reschedule_proposed') {
     const actions = document.createElement('div');
@@ -193,7 +209,7 @@ function appointmentCard(item) {
       button.className = 'cancel-appointment';
       button.textContent = decision === 'accept' ? 'Accept new time' : 'Decline and cancel';
       button.addEventListener('click', async () => {
-        if (!window.confirm(decision === 'accept' ? 'Confirm this proposed appointment time?' : 'Decline this time and cancel the appointment?')) return;
+        if (!(await window.mediqDialog({ title: decision === 'accept' ? 'Accept proposed time?' : 'Decline proposed time?', message: decision === 'accept' ? 'Confirm this proposed appointment time?' : 'Decline this time and cancel the appointment?', confirmLabel: decision === 'accept' ? 'Accept new time' : 'Decline and cancel', danger: decision === 'decline' }))) return;
         actions.querySelectorAll('button').forEach(control => { control.disabled = true; });
         try {
           const result = await api('/api/patient/appointments/' + item.id + '/respond', {
@@ -342,7 +358,7 @@ async function loadProfilePage() {
     <div class="profile-layout"><section class="feature-form-card"><p class="eyebrow">Personal details</p><h2>Account information</h2><form id="profile-form">
       <label>Full name<input name="fullName" maxlength="120" required /></label><label>Email address<input name="email" type="email" readonly /><small>Email changes require verification and are not available yet.</small></label>
       <div class="feature-form-row"><label>Phone number<input name="phone" type="tel" maxlength="20" required /></label><label>Gender<select name="gender" required><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="prefer-not-to-say">Prefer not to say</option></select></label></div>
-      <label>Date of birth<input name="birthDate" type="date" readonly /></label><button class="feature-submit" type="submit">Save profile changes</button><p id="profile-status" class="inline-status" role="status" hidden></p>
+      <div class="feature-form-row"><label>Date of birth<input name="birthDate" type="date" readonly /></label><label>Age<input name="age" readonly /><small>Calculated from your date of birth.</small></label></div><div class="feature-form-row"><label>ID type (optional)<select name="identificationType"><option value="">Not provided</option><option value="mykad">MyKad / IC</option><option value="passport">Passport</option></select></label><label>Identification number (optional)<input name="identificationNumber" maxlength="30" autocomplete="off" /><small>Your full number is only shown in your own profile.</small></label></div><button class="feature-submit" type="submit">Save profile changes</button><p id="profile-status" class="inline-status" role="status" hidden></p>
     </form></section><section class="feature-form-card"><p class="eyebrow">Security</p><h2>Change password</h2><p>Changing your password signs out your other sessions.</p><form id="password-form">
       <label>Current password<span class="password-inline"><input name="currentPassword" type="password" autocomplete="current-password" required /><button type="button" data-toggle-password>Show</button></span></label><label>New password<span class="password-inline"><input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="12" required /><button type="button" data-toggle-password>Show</button></span></label>
       <ul id="profile-password-rules" class="compact-password-rules"><li data-rule="length">12+ characters</li><li data-rule="upper">Uppercase</li><li data-rule="lower">Lowercase</li><li data-rule="number">Number</li><li data-rule="symbol">Symbol</li></ul>
@@ -353,6 +369,9 @@ async function loadProfilePage() {
   profileForm.elements.fullName.value = profile.fullName;
   profileForm.elements.email.value = profile.email;
   profileForm.elements.phone.value = profile.phone || '';
+  profileForm.elements.identificationType.value = profile.identificationType || '';
+  profileForm.elements.identificationNumber.value = profile.identificationNumber || '';
+  profileForm.elements.age.value = profile.age == null ? 'Not available' : profile.age + (Number(profile.age) === 1 ? ' year' : ' years');
   profileForm.elements.gender.value = profile.gender || 'prefer-not-to-say';
   profileForm.elements.birthDate.value = String(profile.birthDate || '').slice(0, 10);
   profileForm.addEventListener('submit', updateProfile);
@@ -396,7 +415,7 @@ async function updateProfile(event) {
     status.hidden = false;
     document.querySelector('#patient-name').textContent = result.profile.fullName;
   } catch (error) {
-    status.textContent = error.message;
+    status.textContent = error.fields ? Object.values(error.fields).join(' ') : error.message;
     status.className = 'inline-status error';
     status.hidden = false;
   }
@@ -430,7 +449,12 @@ async function initialise() {
   renderShell();
   try {
     await identifyPatient();
-    if (page === 'services') await loadServicesPage();
+    if (page === 'services') {
+      await loadServicesPage();
+      setInterval(() => {
+        if (document.visibilityState === 'visible') loadServicesPage().catch(() => showAlert('Queue availability could not be refreshed.', 'error'));
+      }, 30000);
+    }
     if (page === 'history') await loadHistoryPage();
     if (page === 'appointments') await loadAppointmentsPage();
     if (page === 'notifications') await loadNotificationsPage();

@@ -7,6 +7,9 @@
     <title>Appointments | MediQ Staff</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="staff-dashboard.css" />
+    <link rel="stylesheet" href="action-dialog.css" />
+    <script src="action-dialog.js"></script>
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="staff-body" data-staff-page="appointments">
     <header class="staff-header">
@@ -18,11 +21,11 @@
     </header>
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Staff portal">
-        <a href="/staff-dashboard.html"><span aria-hidden="true">⌂</span>Overview</a>
-        <a href="/staff-queue.html"><span aria-hidden="true">Q</span>Live queue</a>
-        <a class="active" href="/staff-appointments.html" aria-current="page"><span aria-hidden="true">□</span>Appointments</a>
-        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
-        <a href="/staff-profile.html"><span aria-hidden="true">●</span>Profile</a>
+        <a href="/staff-dashboard.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="/staff-queue.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Live queue</a>
+        <a class="active" href="/staff-appointments.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/staff-reports.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#reports"></use></svg>Reports</a>
+        <a href="/staff-profile.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
       <main class="staff-main">
         <section class="staff-heading">
@@ -40,10 +43,12 @@
         </section>
       </main>
     </div>
-    <dialog id="appointment-dialog" class="staff-dialog" aria-labelledby="appointment-dialog-title">
-      <form id="staff-appointment-form">
+    <dialog id="appointment-dialog" class="staff-dialog portal-form-dialog" aria-labelledby="appointment-dialog-title">
+      <form id="staff-appointment-form" class="dialog-form-layout">
+        <header class="dialog-form-header">
         <h2 id="appointment-dialog-title">Appointment decision</h2>
-        <p id="appointment-dialog-description"></p>
+        <p id="appointment-dialog-description"></p></header>
+        <div class="dialog-form-body">
         <div id="reschedule-fields" hidden>
           <label>Proposed date<input id="proposed-date" type="date" /></label>
           <label>Available time (Malaysia time)<select id="proposed-time"><option value="">Select a date first</option></select></label>
@@ -51,7 +56,7 @@
         </div>
         <label id="appointment-reason-label">Reason<textarea id="appointment-reason" minlength="3" maxlength="300" rows="3"></textarea></label>
         <p id="appointment-dialog-error" role="alert"></p>
-        <div><button id="appointment-dialog-cancel" type="button" class="staff-secondary-button">Go back</button><button id="appointment-dialog-submit" type="submit" class="staff-primary-button">Confirm</button></div>
+        </div><footer class="dialog-form-footer"><button id="appointment-dialog-cancel" type="button" class="staff-secondary-button">Go back</button><button id="appointment-dialog-submit" type="submit" class="staff-primary-button">Confirm</button></footer>
       </form>
     </dialog>
     <script src="staff-dashboard.js"></script>

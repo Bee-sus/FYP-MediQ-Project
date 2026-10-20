@@ -81,6 +81,17 @@ function configureAuthForm() {
       field.addEventListener('blur', () => { field.dataset.touched = 'true'; setFieldState(field); });
       field.addEventListener(field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input', () => setFieldState(field, field.dataset.touched === 'true'));
     });
+    const ageOutput = document.querySelector('#registration-age');
+    function updateRegistrationAge() {
+      if (!ageOutput) return;
+      const value = birthDate.value;
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const today = Object.fromEntries(parts.map(part => [part.type, part.value]));
+      const [year, month, day] = value.split('-').map(Number);
+      const age = Number(today.year) - year - (Number(today.month) < month || (Number(today.month) === month && Number(today.day) < day) ? 1 : 0);
+      ageOutput.textContent = !value || !birthDate.checkValidity() || age < 0 ? 'Age will be calculated from your date of birth.' : 'Age: ' + age + (age === 1 ? ' year' : ' years');
+    }
+    birthDate.addEventListener('input', updateRegistrationAge); birthDate.addEventListener('change', updateRegistrationAge); updateRegistrationAge();
     form.querySelector('#password').addEventListener('input', updatePasswordDisplay); form.querySelector('#confirm-password').addEventListener('input', updatePasswordMatch); updatePasswordDisplay();
   }
   form.addEventListener('submit', async (event) => {

@@ -97,8 +97,15 @@ def best_top_k(ranking: list[str], train: pd.DataFrame, valid: pd.DataFrame) -> 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", required=True, type=Path, help="Path to WaitData.Published.xlsx")
-    parser.add_argument("--output-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--output-root", type=Path, default=Path(__file__).resolve().parents[1] / "training-candidates")
     args = parser.parse_args()
+
+    active_root = Path(__file__).resolve().parents[1]
+    candidate_model = args.output_root / "models" / "operational_wait_f4_model.joblib"
+    if candidate_model.resolve() == (active_root / "models" / "operational_wait_f4_model.joblib").resolve():
+        parser.error("The active dataset-trained model is protected. Use a separate --output-root for candidate training.")
+    if (args.output_root / "reports" / "operational-wait-model").resolve() == (active_root / "reports" / "operational-wait-model").resolve():
+        parser.error("The original evaluation reports are protected. Use a separate --output-root.")
 
     raw = pd.read_excel(args.workbook, sheet_name="F4", engine="openpyxl")
     missing_columns = [name for name in [TARGET, ORDER_COLUMN, *CANDIDATE_FEATURES] if name not in raw.columns]

@@ -5,12 +5,14 @@ const { hashPassword, verifyPassword, meetsPasswordRules } = require('../service
 const { authenticate, tokenHash } = require('../middleware/authentication');
 const { createVerificationToken, sendVerificationEmail, hashToken } = require('../services/emailVerificationService');
 
+const { validateIdentity } = require('../services/patientIdentity');
 const router = express.Router();
 const roles = new Set(['patient', 'staff', 'admin']);
 const genders = new Set(['female', 'male', 'other', 'prefer-not-to-say']);
 
 function validateRegistration(body) {
-  const errors = {};
+  const identity = validateIdentity(body);
+  const errors = { ...identity.errors };
   const name = String(body.fullName || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
   const phone = String(body.phone || '').trim();
@@ -25,7 +27,7 @@ function validateRegistration(body) {
   if (!meetsPasswordRules(body.password)) errors.password = 'Password does not meet the security requirements.';
   if (body.password !== body.confirmPassword) errors.confirmPassword = 'Passwords do not match.';
   if (body.terms !== true) errors.terms = 'Accept the Terms and Privacy Notice to continue.';
-  return { errors, values: { name, email, phone, birthDate, gender: body.gender } };
+  return { errors, values: { name, email, phone, birthDate, gender: body.gender, identificationType: identity.type, identificationNumber: identity.number } };
 }
 
 function setSessionCookie(response, token, remember) {
@@ -41,9 +43,9 @@ router.post('/register', async (request, response) => {
   try {
     const passwordHash = await hashPassword(request.body.password);
     const [result] = await pool.execute(
-      `INSERT INTO users (full_name, email, password_hash, phone_number, birth_date, gender, role)
-       VALUES (?, ?, ?, ?, ?, ?, 'patient')`,
-      [values.name, values.email, passwordHash, values.phone, values.birthDate, values.gender],
+      `INSERT INTO users (full_name, email, password_hash, phone_number, birth_date, gender, identification_type, identification_number, role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'patient')`,
+      [values.name, values.email, passwordHash, values.phone, values.birthDate, values.gender, values.identificationType, values.identificationNumber],
     );
     const token = await createVerificationToken(pool, result.insertId);
     let delivery;

@@ -7,6 +7,9 @@
     <title>Profile | MediQ Staff</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="staff-dashboard.css" />
+    <link rel="stylesheet" href="action-dialog.css" />
+    <script src="action-dialog.js"></script>
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="staff-body" data-staff-page="profile">
     <header class="staff-header">
@@ -15,11 +18,11 @@
     </header>
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Staff portal">
-        <a href="/staff-dashboard.html"><span aria-hidden="true">⌂</span>Overview</a>
-        <a href="/staff-queue.html"><span aria-hidden="true">Q</span>Live queue</a>
-        <a href="/staff-appointments.html"><span aria-hidden="true">□</span>Appointments</a>
-        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
-        <a class="active" href="/staff-profile.html" aria-current="page"><span aria-hidden="true">●</span>Profile</a>
+        <a href="/staff-dashboard.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="/staff-queue.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Live queue</a>
+        <a href="/staff-appointments.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/staff-reports.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#reports"></use></svg>Reports</a>
+        <a class="active" href="/staff-profile.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
       <main class="staff-main" id="profile">
         <section class="staff-heading"><div><p class="staff-eyebrow">My account</p><h1>Profile</h1><p>Keep your contact details current and manage your password.</p></div><button id="refresh-button" class="staff-secondary-button" type="button">↻ Refresh data</button></section>

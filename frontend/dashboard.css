@@ -1446,3 +1446,43 @@ padding:9px 0
 .portal-body .portal-nav a.active { color: var(--patient-accent-dark); background: var(--patient-soft); }
 .portal-body .brand span, .portal-body .eyebrow { color: var(--patient-accent); }
 .portal-body .dashboard-section, .portal-body .feature-form-card { box-shadow: 0 14px 35px rgba(47, 99, 233, .07); }
+
+/* Live service queues shown before a patient joins. */
+.queue-availability-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -10px 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.queue-availability-tools button {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--blue-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.queue-service-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.queue-load-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e8f7f0;
+  color: #087a55;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+[data-queue-status="moderate"] .queue-load-badge { background: #edf3ff; color: var(--blue-dark); }
+[data-queue-status="busy"] .queue-load-badge { background: #fff0d8; color: #8a5200; }
+[data-queue-status="full"] .queue-load-badge,
+[data-queue-status="closed"] .queue-load-badge { background: #fcebea; color: #a52b20; }
+.queue-availability-metrics { color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.45; }
+.queue-availability-advice { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.queue-service-option:disabled { background: #f8f9fc; cursor: not-allowed; }
+.queue-service-option:disabled:hover { border-color: var(--line); box-shadow: none; transform: none; }

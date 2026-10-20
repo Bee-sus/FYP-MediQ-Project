@@ -7,6 +7,9 @@
     <title>Staff Dashboard | MediQ</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="staff-dashboard.css" />
+    <link rel="stylesheet" href="action-dialog.css" />
+    <script src="action-dialog.js"></script>
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="staff-body" data-staff-page="overview">
     <header class="staff-header">
@@ -19,11 +22,11 @@
 
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Staff portal">
-        <a class="active" href="/staff-dashboard.html" aria-current="page"><span aria-hidden="true">⌂</span>Overview</a>
-        <a href="/staff-queue.html"><span aria-hidden="true">Q</span>Live queue</a>
-        <a href="/staff-appointments.html"><span aria-hidden="true">□</span>Appointments</a>
-        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
-        <a href="/staff-profile.html"><span aria-hidden="true">●</span>Profile</a>
+        <a class="active" href="/staff-dashboard.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="/staff-queue.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Live queue</a>
+        <a href="/staff-appointments.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/staff-reports.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#reports"></use></svg>Reports</a>
+        <a href="/staff-profile.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
 
       <main class="staff-main">

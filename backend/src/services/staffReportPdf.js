@@ -49,6 +49,7 @@ function firstPageHeader(doc, report, generatedAt) {
     .text(`${generatedDate(generatedAt)}  |  Malaysia time`, LEFT + 67, 163);
   if (report.preview) doc.font('Helvetica-Bold').fontSize(8).fillColor(ACCENT)
     .text('SAMPLE DATA', 434, 164, { width: 113, align: 'right' });
+  if(report.quality) doc.font('Helvetica').fontSize(7).fillColor(MUTED).text('Automatic filtering'+' | Included: '+report.quality.includedVisits+' / '+report.quality.totalVisits+' | Excluded: '+(report.quality.excludedByScope+report.quality.excludedUnusual),LEFT,176,{width:WIDTH});
   line(doc, LEFT, 186, RIGHT);
 }
 
@@ -110,6 +111,8 @@ function results(doc, report, y) {
     ['Completed visits', completed],
     ['Average wait', minutes(report.summary.averageWaitMinutes)],
     ['Average consultation', minutes(report.summary.averageConsultationMinutes)],
+    ['Median wait', minutes(report.summary.medianWaitMinutes)],
+    ['Longest wait', minutes(report.summary.longestWaitMinutes)],
   ];
   const statuses = [
     ['Completed', completed],
@@ -178,12 +181,12 @@ function serviceTable(doc, report, y) {
 
 function predictionAccuracy(doc, report, y) {
   const prediction = report.predictionPerformance || {};
-  if (y + 171 > CONTENT_BOTTOM) {
+  if (y + 250 > CONTENT_BOTTOM) {
     doc.addPage();
     continuationHeader(doc, report);
     y = 103;
   } else y += 22;
-  y = section(doc, '04', 'ML prediction check', y);
+  y = section(doc, '04', 'Local prediction check', y);
   const measured = count(prediction.modelVisits);
   const within = count(prediction.withinFiveMinutes);
   const items = [
@@ -233,8 +236,29 @@ function predictionAccuracy(doc, report, y) {
   return y;
 }
 
+function visitReview(doc, report, y) {
+  if (!report.visits) return y;
+  if(y+170>CONTENT_BOTTOM){doc.addPage(); continuationHeader(doc, report); y=103;}else y+=24;
+  y=section(doc,'05','Visit review',y);
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text('Latest '+report.visits.length+' of '+report.detailTotal+' visits. Automatically excluded visits remain visible for transparency. No patient names or identification numbers are included.',LEFT,y,{width:WIDTH});y+=36;
+  function heading(){doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('TICKET / STATUS',LEFT,y,{width:190}).text('WAIT / CONSULT',LEFT+196,y,{width:115}).text('PRED / ERROR',LEFT+314,y,{width:90}).text('REVIEW',LEFT+408,y,{width:90});line(doc,LEFT,y+17,RIGHT);y+=24;}
+  heading();
+  for(const v of report.visits){
+    const label='Q'+v.serviceId+'-'+String(v.queueNumber).padStart(3,'0')+' / '+v.status.replaceAll('_',' ')+' / '+(v.included?'included':'excluded');
+    const review=v.flags.join(', ')||'No flags';
+    const height=Math.max(43,doc.font('Helvetica').fontSize(8).heightOfString(review,{width:90})+12,doc.heightOfString(label+'\n'+v.serviceName,{width:190})+12);
+    if(y+height>CONTENT_BOTTOM){doc.addPage();continuationHeader(doc,report);y=103;heading();}
+    doc.font('Helvetica').fontSize(8).fillColor(INK).text(label+'\n'+v.serviceName,LEFT,y,{width:190});
+    doc.text((v.waitMinutes==null&&v.elapsedWaitMinutes!=null?'Open '+minutes(v.elapsedWaitMinutes):minutes(v.waitMinutes))+' / '+(v.consultationMinutes==null&&v.elapsedConsultationMinutes!=null?'Open '+minutes(v.elapsedConsultationMinutes):minutes(v.consultationMinutes)),LEFT+196,y,{width:115});
+    doc.text(minutes(v.predictedMinutes)+' / '+minutes(v.errorMinutes),LEFT+314,y,{width:90});
+    doc.text(review,LEFT+408,y,{width:90});line(doc,LEFT,y+height-6,RIGHT);y+=height;
+  }
+  return y;
+}
+
 function definitions(doc, report, y) {
-  const notes = 'Counts cover tickets dated in this period; statuses reflect export time. Other includes waiting, called, or in-progress entries. Average wait is joining to consultation start; average consultation is start to completion. ML accuracy compares the saved joining estimate with actual join-to-consultation wait. Only visits with both values are measured; fallback estimates are excluded. Test visits in this database should be interpreted as test data.';
+  const scope = report.quality ? `Automatic filtering. Included ${report.quality.includedVisits} of ${report.quality.totalVisits} visits. Excluded by scope: ${report.quality.excludedByScope}; excluded unusual: ${report.quality.excludedUnusual}. Review thresholds: wait ${report.quality.waitReviewMinutes} min, consultation ${report.quality.consultationReviewMinutes} min. Durations are never capped. ` : '';
+  const notes = scope + 'Counts cover tickets dated in this period; statuses reflect export time. Other includes waiting, called, or in-progress entries. Average wait is joining to consultation start; average consultation is start to completion. ML accuracy compares the saved joining estimate with actual join-to-consultation wait. Only visits with both values are measured; fallback estimates are excluded. These local measurements are separate from the original dataset evaluation. All visit types are evaluated by the same automatic duration checks; these checks do not establish real-clinic accuracy.';
   doc.font('Helvetica').fontSize(8.5);
   const height = doc.heightOfString(notes, { width: WIDTH, lineGap: 2 });
   if (y + 55 + height > CONTENT_BOTTOM) {
@@ -242,7 +266,7 @@ function definitions(doc, report, y) {
     continuationHeader(doc, report);
     y = 103;
   } else y += 23;
-  y = section(doc, '05', 'Scope and definitions', y);
+  y = section(doc, '06', 'Scope and definitions', y);
   doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
     .text(notes, LEFT, y, { width: WIDTH, lineGap: 2 });
 }
@@ -274,6 +298,7 @@ function generateStaffReportPdf(report, generatedAt = new Date()) {
       y = results(doc, report, y);
       y = serviceTable(doc, report, y);
       y = predictionAccuracy(doc, report, y);
+      y = visitReview(doc, report, y);
       definitions(doc, report, y);
       footers(doc);
       doc.end();

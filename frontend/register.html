@@ -12,14 +12,15 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="auth.css" />
+    <link rel="stylesheet" href="role-login.css" />
   </head>
-  <body>
+  <body class="patient-login-body patient-register-body">
     <aside class="auth-introduction">
       <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
-      <div class="auth-introduction-copy">
+      <div class="auth-introduction-copy"><div class="auth-role-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4" /><path d="M2 21v-2a7 7 0 0 1 14 0v2m3-15v6m-3-3h6" /></svg></div>
         <p class="eyebrow">Patient registration</p>
         <h1>Plan your visit with less waiting.</h1>
-        <p>This public form creates patient accounts only. Staff and administrator access is issued by the clinic.</p>
+        <p>Create your patient account to join queues remotely, plan appointments and follow your visit.</p><ul class="auth-role-features"><li>Join a queue from wherever you are</li><li>Keep appointments in one place</li><li>Receive updates as your turn approaches</li></ul>
       </div>
       <a class="back-link" href="/">← Back to homepage</a>
     </aside>
@@ -28,9 +29,10 @@
       <section class="auth-card" aria-labelledby="register-heading">
         <p class="eyebrow">Create an account</p>
         <h2 id="register-heading">Patient registration</h2>
-        <p class="auth-subtitle">All fields are required. Validation is shown as you complete each field. After registration, check your email to verify your account before signing in.</p>
+        <p class="auth-subtitle">Fields marked optional can be left blank. After creating your account, verify your email to start using MediQ.</p>
 
         <form class="auth-form" data-auth-form="register" novalidate>
+          <h3 class="registration-section-heading">Your details</h3>
           <div class="form-group">
             <label for="full-name">Full name</label>
             <input
@@ -105,7 +107,10 @@
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-row"><div class="form-group"><label for="identification-type">ID type <small>(optional)</small></label><select id="identification-type" name="identificationType" aria-describedby="identification-type-error"><option value="">Not provided</option><option value="mykad">MyKad / IC</option><option value="passport">Passport</option></select><p id="identification-type-error" class="field-error"></p></div><div class="form-group"><label for="identification-number">Identification number <small>(optional)</small></label><input id="identification-number" name="identificationNumber" maxlength="30" autocomplete="off" aria-describedby="identification-number-help identification-number-error" /><p class="form-help" id="identification-number-help">Optional. Choose an ID type if providing a number.</p><p id="identification-number-error" class="field-error"></p></div></div>
+          <p class="form-help" id="registration-age" role="status">Age will be calculated from your date of birth.</p>
+          <h3 class="registration-section-heading registration-security-heading">Secure your account</h3>
+          <div class="form-row registration-passwords">
             <div class="form-group">
               <label for="password">Password</label>
               <div class="password-input">

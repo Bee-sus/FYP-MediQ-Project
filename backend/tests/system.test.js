@@ -31,6 +31,29 @@ describe('system endpoints', () => {
     execute.mockRestore();
   });
 
+  test('shows patients current availability and estimated wait for each open queue', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 9, fullName: 'Test Patient', role: 'patient' }]])
+      .mockResolvedValueOnce([[
+        { id: 1, name: 'General Consultation', averageDurationMinutes: 15, queueCapacity: 8, isQueueOpen: 1, activePatients: 2, lastQueueNumber: 6 },
+        { id: 2, name: 'Dental Consultation', averageDurationMinutes: 20, queueCapacity: 3, isQueueOpen: 1, activePatients: 3, lastQueueNumber: 3 },
+        { id: 3, name: 'Specialist Consultation', averageDurationMinutes: 25, queueCapacity: null, isQueueOpen: 0, activePatients: 1, lastQueueNumber: 1 },
+      ]]);
+
+    const response = await request(app).get('/api/patient/queues/availability').set('Cookie', 'mediq_session=patient-token');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body.services).toMatchObject([
+      { id: 1, activePatients: 2, isQueueOpen: true, estimatedWaitMinutes: 30, estimateSource: 'baseline-average-duration-v1' },
+      { id: 2, activePatients: 3, isQueueOpen: true, estimatedWaitMinutes: null },
+      { id: 3, activePatients: 1, isQueueOpen: false, estimatedWaitMinutes: null },
+    ]);
+    expect(execute.mock.calls[1][0]).toContain('COUNT(CASE WHEN q.status IN');
+    expect(execute.mock.calls[1][0]).toContain('MAX(q.queue_number)');
+    execute.mockRestore();
+  });
+
   test('serves the completed homepage feature sections', async () => {
     const response = await request(app).get('/');
 
@@ -198,10 +221,7 @@ describe('system endpoints', () => {
   test('generates a staff report from queue activity for the requested dates', async () => {
     const execute = jest.spyOn(pool, 'execute')
       .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
-      .mockResolvedValueOnce([[{ totalPatients: 3, completed: 2, cancelled: 1, averageWaitMinutes: 12, averageConsultationMinutes: 18 }]])
-      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', patientCount: 3, completed: 2 }]])
-      .mockResolvedValueOnce([[{ measuredVisits: 3, modelVisits: 2, fallbackVisits: 1, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]])
-      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]]);
+      .mockResolvedValueOnce([[{"id":1,"serviceId":2,"queueNumber":1,"serviceName":"Dental Consultation","isTestVisit":0,"status":"completed","consultationStartedAt":"2026-09-01","waitMinutes":12,"consultationMinutes":18,"predictedMinutes":11,"predictionModel":"operational-f4-hist-gradient-boosting-v1"},{"id":2,"serviceId":2,"queueNumber":2,"serviceName":"Dental Consultation","isTestVisit":0,"status":"completed","consultationStartedAt":"2026-09-01","waitMinutes":12,"consultationMinutes":18,"predictedMinutes":18,"predictionModel":"operational-f4-hist-gradient-boosting-v1"},{"id":3,"serviceId":2,"queueNumber":3,"serviceName":"Dental Consultation","isTestVisit":0,"status":"cancelled","consultationStartedAt":"2026-09-01","waitMinutes":12,"predictedMinutes":12,"predictionModel":"baseline-average-duration-v1"}]]);
 
     const response = await request(app).get('/api/staff/reports?from=2026-09-01&to=2026-09-30').set('Cookie', 'mediq_session=staff-token');
     expect(response.statusCode).toBe(200);
@@ -212,21 +232,15 @@ describe('system endpoints', () => {
       services: [{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }],
     });
     expect(execute.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-30']);
-    expect(execute.mock.calls[3][0]).toContain('ABS(p.estimated_minutes - p.actual_wait_minutes)');
-    expect(execute.mock.calls[3][1]).toEqual([
-      'operational-f4-hist-gradient-boosting-v1', 'operational-f4-hist-gradient-boosting-v1',
-      'operational-f4-hist-gradient-boosting-v1', 'operational-f4-hist-gradient-boosting-v1', '2026-09-01', '2026-09-30',
-    ]);
+    expect(execute.mock.calls[1][0]).toContain('TIMESTAMPDIFF(SECOND,q.joined_at,q.consultation_started_at)');
+    expect(execute.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-30']);
     execute.mockRestore();
   });
 
   test('downloads a separately generated staff PDF report', async () => {
     const execute = jest.spyOn(pool, 'execute')
       .mockResolvedValueOnce([[{ id: 7, fullName: 'Clinic Staff', role: 'staff' }]])
-      .mockResolvedValueOnce([[{ totalPatients: 3, completed: 2, cancelled: 1, averageWaitMinutes: 12, averageConsultationMinutes: 18 }]])
-      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', patientCount: 3, completed: 2 }]])
-      .mockResolvedValueOnce([[{ measuredVisits: 3, modelVisits: 2, fallbackVisits: 1, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]])
-      .mockResolvedValueOnce([[{ serviceName: 'Dental Consultation', measuredVisits: 2, meanAbsoluteErrorMinutes: 3.5, withinFiveMinutes: 1 }]]);
+      .mockResolvedValueOnce([[{"id":1,"serviceId":2,"queueNumber":1,"serviceName":"Dental Consultation","isTestVisit":0,"status":"completed","consultationStartedAt":"2026-09-01","waitMinutes":12,"consultationMinutes":18,"predictedMinutes":11,"predictionModel":"operational-f4-hist-gradient-boosting-v1"},{"id":2,"serviceId":2,"queueNumber":2,"serviceName":"Dental Consultation","isTestVisit":0,"status":"completed","consultationStartedAt":"2026-09-01","waitMinutes":12,"consultationMinutes":18,"predictedMinutes":18,"predictionModel":"operational-f4-hist-gradient-boosting-v1"},{"id":3,"serviceId":2,"queueNumber":3,"serviceName":"Dental Consultation","isTestVisit":0,"status":"cancelled","consultationStartedAt":"2026-09-01","waitMinutes":12,"predictedMinutes":12,"predictionModel":"baseline-average-duration-v1"}]]);
 
     const response = await request(app)
       .get('/api/staff/reports/pdf?from=2026-09-01&to=2026-09-30')

@@ -177,7 +177,7 @@
 .staff-dialog form { padding: 30px; }
 .staff-dialog h2 { margin: 8px 0 10px; font-size: 1.65rem; }
 .staff-dialog form > p:not(.staff-eyebrow) { color: var(--staff-muted); line-height: 1.55; }
-.staff-dialog form > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.staff-dialog form > div:has(> button) { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 
 @media (max-width: 1050px) {
   .staff-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

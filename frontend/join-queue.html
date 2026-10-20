@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="portal-body">
     <header class="portal-header">
@@ -21,16 +22,14 @@
     </header>
     <div class="portal-layout">
       <nav class="portal-nav" aria-label="Patient portal">
-        <a href="/patient-dashboard.html"><span aria-hidden="true">⌂</span> Overview</a>
-        <a href="/patient-services.html"><span aria-hidden="true">✚</span> Clinic services</a>
-        <a class="active" href="/join-queue.html" aria-current="page">
-          <span aria-hidden="true">＋</span> Join queue
-        </a>
-        <a href="/queue-status.html"><span aria-hidden="true">Q</span> Queue status</a>
-        <a href="/appointments.html"><span aria-hidden="true">□</span> Appointments</a>
-        <a href="/notifications.html"><span aria-hidden="true">○</span> Notifications</a>
-        <a href="/queue-history.html"><span aria-hidden="true">↻</span> Queue history</a>
-        <a href="/patient-profile.html"><span aria-hidden="true">◎</span> Profile</a>
+        <a href="/patient-dashboard.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="/patient-services.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#services"></use></svg>Clinic services</a>
+        <a class="active" href="/join-queue.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#join"></use></svg>Join queue</a>
+        <a href="/queue-status.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Queue status</a>
+        <a href="/appointments.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/notifications.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#notifications"></use></svg>Notifications</a>
+        <a href="/queue-history.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#history"></use></svg>Queue history</a>
+        <a href="/patient-profile.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
       <main class="patient-main narrow-patient-main">
         <section class="patient-heading queue-page-heading">
@@ -52,9 +51,10 @@
           <section class="queue-workspace-card" aria-labelledby="service-choice-heading">
             <div class="dashboard-section-heading">
               <div><p class="eyebrow">Available today</p><h2 id="service-choice-heading">Choose a service</h2></div>
-              <span class="availability-label"><i aria-hidden="true"></i> Open</span>
+              <span class="availability-label"><i aria-hidden="true"></i> Live queues</span>
             </div>
-            <p class="section-introduction">Select the service that best matches the purpose of your visit.</p>
+            <p class="section-introduction">Compare current queues, then select the service that matches your visit.</p>
+            <div class="queue-availability-tools"><span id="queue-availability-updated">Checking queues…</span><button id="refresh-queue-availability" type="button">Refresh</button></div>
             <div id="queue-services" class="queue-service-options" role="radiogroup" aria-labelledby="service-choice-heading">
               <p class="dashboard-loading">Loading available services…</p>
             </div>
@@ -71,8 +71,9 @@
               <div><dt>Date</dt><dd id="confirm-date">—</dd></div>
             </dl>
             <p class="queue-disclaimer">
-              Your estimated wait will appear after joining. Emergencies and clinical priorities may change the queue order.
+              Your place and updated wait will appear after joining. Staff will call when ready.
             </p>
+            <fieldset class="arrival-choice"><legend>Where are you joining from?</legend><label><input type="radio" name="join-location" value="at_clinic" /> I’m at the clinic</label><label><input type="radio" name="join-location" value="remote" /> I’m joining remotely</label><small>Staff will see your arrival status. Your place follows joining time.</small></fieldset>
             <label class="queue-agreement">
               <input id="queue-agreement" type="checkbox" />
               <span>I confirm that I want to join this clinic queue today.</span>
@@ -84,6 +85,7 @@
       </main>
     </div>
     <script src="queue-ticket.js"></script>
+    <script src="queue-availability.js"></script>
     <script src="join-queue.js"></script>
   </body>
 </html>

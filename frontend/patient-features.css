@@ -140,6 +140,20 @@
   background: #fff;
 }
 
+.service-availability {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.service-availability-wait { color: var(--ink); font-size: 12px; }
+.service-availability-count { color: var(--muted); font-size: 11px; }
+.feature-service-copy .service-availability-advice { margin-top: 8px; }
+.primary-card-action[aria-disabled="true"] { border-color: var(--line); background: #eef1f6; color: var(--muted); cursor: not-allowed; }
+
 .filter-bar {
   margin-bottom: 16px;
   padding: 5px;

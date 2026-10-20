@@ -1,0 +1,7 @@
+{
+  "model_file": "operational_wait_f4_model.joblib",
+  "sha256": "3f9e869b538bdeecdaa1d2ac086575e85ff034bf68ac5d112327c696b21491ee",
+  "training_source": "WaitData.Published.xlsx, F4 worksheet",
+  "training_mode": "offline_dataset_only",
+  "online_training_enabled": false
+}

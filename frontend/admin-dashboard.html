@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="staff-dashboard.css" />
     <link rel="stylesheet" href="admin-dashboard.css" />
+    <link rel="stylesheet" href="action-dialog.css" />
+    <script src="action-dialog.js"></script>
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="staff-body admin-body">
     <header class="staff-header">
@@ -16,13 +19,13 @@
     </header>
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Administrator portal">
-        <a href="#overview">Overview</a>
-        <a href="#staff">Staff accounts</a>
-        <a href="#services">Clinic services</a>
-        <a href="#hours">Operating hours</a>
-        <a href="#patients">Patients</a>
-        <a href="#settings">Clinic settings</a>
-        <a href="#activity">Activity log</a>
+        <a href="#overview"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="#staff"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#staff"></use></svg>Staff accounts</a>
+        <a href="#services"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#services"></use></svg>Clinic services</a>
+        <a href="#hours"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#hours"></use></svg>Operating hours</a>
+        <a href="#patients"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#patients"></use></svg>Patients</a>
+        <a href="#settings"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#settings"></use></svg>Clinic settings</a>
+        <a href="#activity"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#activity"></use></svg>Activity log</a>
       </nav>
       <main class="staff-main">
         <div class="staff-heading"><div><p class="staff-eyebrow">Administrator portal</p><h1>Clinic management</h1><p>Manage staff access, services and appointment availability.</p></div></div>
@@ -74,18 +77,21 @@
         <section data-panel="settings" aria-labelledby="settings-heading" hidden><div class="staff-section-heading"><div><h2 id="settings-heading">Clinic settings</h2><p>Update the clinic identity and contact information displayed by the system.</p></div></div><form id="settings-form" class="admin-card settings-form"><label>Clinic name<input name="clinicName" minlength="2" maxlength="120" required /></label><label>Address<textarea name="address" maxlength="300" rows="3"></textarea></label><label>Contact number<input name="phone" maxlength="30" /></label><label>Timezone<input name="timezone" value="Asia/Kuala_Lumpur" readonly /></label><button class="staff-primary-button" type="submit">Save settings</button></form></section>
       </main>
     </div>
-    <dialog id="service-dialog" class="staff-dialog" aria-labelledby="service-dialog-title">
+    <dialog id="service-dialog" class="staff-dialog" aria-labelledby="service-dialog-title" aria-describedby="service-dialog-description">
       <form id="service-form">
-        <h2 id="service-dialog-title">Clinic service</h2>
-        <label>Service name<input name="name" minlength="2" maxlength="120" required /></label>
-        <label>Doctor name<input name="doctorName" maxlength="120" placeholder="Doctor assigned to this service" /></label>
-        <label>Service provided<textarea name="serviceDetails" maxlength="500" rows="2" placeholder="Describe what the doctor provides."></textarea></label>
-        <label>Description<textarea name="description" maxlength="1000" rows="3"></textarea></label>
-        <label>Average consultation duration (minutes)<input name="averageDurationMinutes" type="number" min="1" max="240" step="1" required /></label>
-        <label>Daily queue capacity <small>Optional</small><input name="queueCapacity" type="number" min="1" max="500" placeholder="No limit" /></label>
-        <label class="admin-checkbox"><input name="isActive" type="checkbox" /> Active service</label>
-        <p id="service-error" role="alert"></p>
-        <div><button id="close-service" type="button" class="staff-secondary-button">Go back</button><button type="submit" class="staff-primary-button">Save service</button></div>
+        <header class="service-form-header"><p class="staff-eyebrow">Clinic management</p><h2 id="service-dialog-title">Clinic service</h2><p id="service-dialog-description">Set up the service details and queue settings patients will use.</p></header>
+        <div class="service-form-content">
+          <fieldset class="service-form-section"><legend>Service details</legend>
+            <div class="service-form-grid"><label>Service name<input name="name" minlength="2" maxlength="120" placeholder="e.g. General consultation" required /></label><label><span>Doctor name <small>Optional</small></span><input name="doctorName" maxlength="120" placeholder="Assigned doctor" /></label></div>
+            <div class="service-form-grid"><label><span>Service provided <small>Optional</small></span><textarea name="serviceDetails" maxlength="500" rows="3" placeholder="What this service includes"></textarea></label><label><span>Description <small>Optional</small></span><textarea name="description" maxlength="1000" rows="3" placeholder="A short description for patients"></textarea></label></div>
+          </fieldset>
+          <fieldset class="service-form-section"><legend>Queue settings</legend>
+            <div class="service-form-grid"><label>Average consultation<input name="averageDurationMinutes" type="number" min="1" max="240" step="1" required /><small>Minutes per patient</small></label><label>Daily queue capacity<input name="queueCapacity" type="number" min="1" max="500" placeholder="No limit" /><small>Optional · leave empty for no limit</small></label></div>
+          </fieldset>
+          <label class="service-active-toggle"><span><strong>Active service</strong><small>Make this service available in the clinic service list.</small></span><input name="isActive" type="checkbox" role="switch" /></label>
+          <p id="service-error" role="alert"></p>
+        </div>
+        <footer class="service-form-footer"><button id="close-service" type="button" class="staff-secondary-button">Go back</button><button type="submit" class="staff-primary-button">Save service</button></footer>
       </form>
     </dialog>
     <dialog id="credentials-dialog" class="staff-dialog" aria-labelledby="credentials-title"><div class="credential-sheet"><h2 id="credentials-title">Staff login credentials</h2><p id="credential-email-status">These credentials are shown once. The staff member must verify their email and change the temporary password.</p><dl><dt>Staff ID</dt><dd id="credential-id"></dd><dt>Name</dt><dd id="credential-name"></dd><dt>Email</dt><dd id="credential-email"></dd><dt>Temporary password</dt><dd id="credential-password"></dd><dt id="verification-link-label" hidden>Local verification link</dt><dd id="credential-verification" hidden></dd></dl><div><button id="email-credentials" class="staff-primary-button" type="button">Open email draft</button><button id="close-credentials" class="staff-secondary-button" type="button">Close</button></div></div></dialog>

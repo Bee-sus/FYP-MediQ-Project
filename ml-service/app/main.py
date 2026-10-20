@@ -1,4 +1,5 @@
 from pathlib import Path
+from .model_integrity import verified_model_hash
 
 import joblib
 import pandas as pd
@@ -8,7 +9,13 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="MediQ Prediction Service", version="0.1.0")
 OPERATIONAL_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "operational_wait_f4_model.joblib"
-OPERATIONAL_MODEL = joblib.load(OPERATIONAL_MODEL_PATH) if OPERATIONAL_MODEL_PATH.exists() else None
+MODEL_MANIFEST_PATH = OPERATIONAL_MODEL_PATH.with_suffix(".manifest.json")
+LOADED_MODEL_SHA256 = verified_model_hash(OPERATIONAL_MODEL_PATH, MODEL_MANIFEST_PATH)
+OPERATIONAL_MODEL = joblib.load(OPERATIONAL_MODEL_PATH) if LOADED_MODEL_SHA256 else None
+
+
+def model_integrity_ok():
+    return bool(LOADED_MODEL_SHA256 and verified_model_hash(OPERATIONAL_MODEL_PATH, MODEL_MANIFEST_PATH) == LOADED_MODEL_SHA256)
 
 
 class OperationalWaitInput(BaseModel):
@@ -31,14 +38,18 @@ class OperationalWaitInput(BaseModel):
 @app.get("/health")
 def health_check():
     return {"service": "MediQ prediction service", "status": "running",
-        "model": "operational_f4" if OPERATIONAL_MODEL is not None else "unavailable",
-        "operational_f4_model_available": OPERATIONAL_MODEL is not None}
+        "model": "operational_f4" if OPERATIONAL_MODEL is not None and model_integrity_ok() else "unavailable",
+        "operational_f4_model_available": OPERATIONAL_MODEL is not None and model_integrity_ok(),
+        "online_training_enabled": False,
+        "model_integrity_ok": model_integrity_ok(),
+        "model_sha256": LOADED_MODEL_SHA256,
+        "training_source": "WaitData.Published.xlsx, F4 worksheet"}
 
 
 @app.post("/predict-operational-wait")
 def predict_operational_wait(data: OperationalWaitInput):
     """Predict total wait at queue entry using the published F4 walk-in model."""
-    if OPERATIONAL_MODEL is None:
+    if OPERATIONAL_MODEL is None or not model_integrity_ok():
         raise HTTPException(status_code=503, detail="Operational F4 model artifact is not available")
 
     start_time = data.arrival_hour + data.arrival_minute / 60.0 + data.arrival_second / 3600.0

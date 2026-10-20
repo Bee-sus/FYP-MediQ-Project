@@ -3,6 +3,7 @@ const queueClock = new Intl.DateTimeFormat('en-MY', {
 });
 
 function queueEstimatePresentation(queue, now = new Date()) {
+  if (queue.status === 'not_present') return { waitValue: 'Awaiting recall', waitLabel: 'Check in and contact reception', clockText: '' };
   if (queue.status === 'called') return { waitValue: 'Called', waitLabel: 'Queue status', clockText: '' };
   if (queue.status === 'in_progress') return { waitValue: 'In consultation', waitLabel: 'Queue status', clockText: '' };
 

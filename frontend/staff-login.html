@@ -9,20 +9,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="auth.css" />
+    <link rel="stylesheet" href="role-login.css" />
   </head>
-  <body>
+  <body class="staff-login-body">
     <aside class="auth-introduction">
       <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
-      <div class="auth-introduction-copy">
+      <div class="auth-introduction-copy"><div class="auth-role-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1" /></svg></div>
         <p class="eyebrow">Clinic staff access</p>
         <h1>Manage each queue with confidence.</h1>
-        <p>Authorised clinic staff can access queue operations, appointments, services and performance analytics.</p>
-      </div>
+        <p>Keep patients informed, manage appointments and guide each queue through the day.</p>
+      <ul class="auth-role-features"><li>Live queues and patient arrivals</li><li>Appointment requests</li><li>Queue performance reports</li></ul></div>
       <a class="back-link" href="/">← Back to homepage</a>
     </aside>
     <main class="auth-main">
       <section class="auth-card" aria-labelledby="staff-login-heading">
-        <p class="eyebrow">Restricted access</p>
+        <p class="eyebrow">Staff workspace</p>
         <h2 id="staff-login-heading">Staff sign in</h2>
         <p class="auth-subtitle">Staff accounts are issued and managed by the clinic administrator.</p>
         <form class="auth-form" data-auth-form="staff-login">

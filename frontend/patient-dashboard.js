@@ -1,5 +1,6 @@
 fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
 const statusLabels = {
+  not_present: 'Missed call',
   waiting: 'Waiting',
   called: 'Called',
   in_progress: 'In consultation',
@@ -51,6 +52,7 @@ function renderQueue(queue) {
     </div>
     <p class="estimate-explanation">${queue.status === 'waiting' ? 'Your queue status updates automatically. Staff will call you when ready.' : 'Your queue status has updated.'}</p>
   `;
+  if (queue.delayNotice) { const notice = document.createElement('p'); notice.className = 'service-delay-notice'; notice.textContent = 'Service update: ' + queue.delayNotice + ' · Waiting times may change.'; container.append(notice); }
 }
 
 function renderServices(services) {
@@ -71,6 +73,7 @@ function renderServices(services) {
     `;
     card.querySelector('h3').textContent = service.name;
     card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
+    if (service.delayNotice) { const notice = document.createElement('p'); notice.className = 'service-delay-notice'; notice.textContent = 'Service update: ' + service.delayNotice; card.append(notice); }
     card.querySelector('a').href = `/join-queue.html?service=${service.id}`;
     card.querySelector('a').textContent = 'Select service';
     return card;
@@ -99,6 +102,7 @@ function renderHistory(items) {
     row.querySelector('strong').textContent = item.serviceName;
     row.querySelector('div span').textContent = formatDate(item.queueDate);
     row.querySelector('.history-status').textContent = statusLabels[item.status] || item.status;
+    row.querySelector('.history-status').dataset.status = item.status;
     row.querySelector('.history-number').textContent = formatQueueTicket(item.serviceId, item.queueNumber);
     return row;
   }));

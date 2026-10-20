@@ -49,6 +49,7 @@ function estimateLiveRemainingWait(queue) {
     return { remainingWaitMinutes: 0, remainingEstimateMethod: 'patient-called-or-in-progress' };
   }
 
+  if (queue.status === 'not_present') return { remainingWaitMinutes: null, remainingEstimateMethod: 'awaiting-recall' };
   const peopleAhead = Math.max(0, Number(queue.peopleAhead) || 0);
   if (peopleAhead === 0) {
     return { remainingWaitMinutes: 0, remainingEstimateMethod: 'next-in-line' };

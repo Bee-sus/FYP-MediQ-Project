@@ -109,3 +109,69 @@ footer a { color: var(--blue-dark); }
   .header-actions { align-items: flex-end; flex-direction: column; }
   .workflow-section { padding: 24px; }
 }
+
+/* Keep action feedback visible while working further down a page. */
+#staff-alert, #admin-alert, #page-alert, #status-alert { position: sticky; top: 12px; z-index: 20; box-shadow: 0 4px 16px #17274612; }
+#staff-alert button, #admin-alert button, #page-alert button, #status-alert button { margin-left: 10px; padding: 6px 12px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.staff-dialog, .cancel-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #dce5ed; border-radius: 20px; background: #fff; box-shadow: 0 24px 80px #12243b33; }
+.staff-dialog::backdrop, .cancel-dialog::backdrop { background: #12243b88; backdrop-filter: blur(3px); }
+.staff-dialog :focus-visible, .cancel-dialog :focus-visible { outline: 3px solid #008579; outline-offset: 3px; }
+button[aria-busy="true"], form[aria-busy="true"] button { cursor: wait; }
+button:disabled { opacity: .6; }
+
+.arrival-choice { border: 1px solid #dce5ed; border-radius: 12px; padding: 16px; margin: 18px 0; }
+.arrival-choice legend { font-weight: 700; }
+.arrival-choice label { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.arrival-choice small { display: block; color: #60728b; line-height: 1.5; }
+.arrival-status { display: grid; gap: 10px; max-width: 320px; }
+.arrival-status span { font-size: .85rem; }
+.arrival-badge { display: inline-block; padding: 5px 9px; border-radius: 8px; background: #e8f5f2; color: #006e65; font-size: .8rem; }
+
+.staff-status[data-status="not_present"], .record-status[data-status="not_present"] { background: #fff0d9; color: #8b5500; }
+
+.queue-tools, .queue-alert-options { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; padding: 16px; margin: 14px 0; border: 1px solid #dce5ed; border-radius: 14px; background: #fff; }
+.queue-tools label, .service-notice-dialog label { display: grid; gap: 8px; font-weight: 600; }
+.queue-tools input, .queue-tools select, .service-notice-dialog textarea, .service-notice-dialog select { padding: 11px; border: 1px solid #b9c9d8; border-radius: 9px; font: inherit; max-width: 100%; }
+.queue-alert-options { align-items: center; }
+.queue-alert-options label { display: flex; align-items: center; gap: 7px; }
+.queue-alert-options button { border: 1px solid #b9c9d8; border-radius: 9px; padding: 8px 12px; background: white; color: #172746; font: inherit; cursor: pointer; }
+.queue-alert-options small { flex-basis: 100%; color: #60728b; }
+.service-delay-notice { padding: 14px 18px; margin: 12px 0; background: #fff2d9; border-left: 4px solid #d49b29; border-radius: 8px; color: #694800; line-height: 1.5; overflow-wrap: anywhere; }
+.service-notice-dialog label { margin: 16px 0; }
+.service-notice-dialog form > div { flex-wrap: wrap; }
+.service-notice-dialog .notice-error { color: #b42330; }
+
+/* Align the queue toolbar controls on a shared baseline. */
+.queue-tools { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(170px, 220px) auto auto; align-items: end; gap: 16px; padding: 20px; }
+.queue-tools > label { min-width: 0; margin: 0; gap: 9px; }
+.queue-tools input, .queue-tools select { width: 100%; min-width: 0; height: 48px; margin: 0; padding: 0 14px; box-sizing: border-box; }
+.queue-tools > button { height: 48px; margin: 0; padding: 0 18px; white-space: nowrap; }
+#queue-filter-count { display: flex; align-items: center; height: 48px; color: #60728b; font-size: .9rem; white-space: nowrap; }
+.queue-auto-alert { flex-basis: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-radius: 10px; background: #e4f5f0; color: #075e52; border-left: 4px solid #008579; }
+.queue-auto-alert[hidden] { display: none; }
+.queue-auto-alert span { overflow-wrap: anywhere; }
+@media (max-width: 850px) { .queue-tools { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 520px) { .queue-tools { grid-template-columns: minmax(0, 1fr); } .queue-tools > button { width: 100%; } #queue-filter-count { height: auto; } .queue-auto-alert { align-items: start; flex-direction: column; } }
+.queue-alert-options .queue-auto-alert { position: fixed; right: 24px; bottom: 24px; z-index: 100; width: min(460px, calc(100vw - 48px)); box-shadow: 0 12px 36px #17274630; }
+
+/* Allow dialog fields to shrink below native select content width. */
+.staff-dialog.service-notice-dialog { width: min(520px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.service-notice-dialog form { width: 100%; min-width: 0; box-sizing: border-box; }
+.service-notice-dialog label { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
+.service-notice-dialog select, .service-notice-dialog textarea { display: block; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.service-notice-dialog select { text-overflow: ellipsis; }
+.service-notice-dialog form > p { overflow-wrap: anywhere; }
+.service-notice-dialog form > div { min-width: 0; flex-wrap: wrap; }
+@media (max-width: 520px) { .staff-dialog.service-notice-dialog form { padding: 20px; } .service-notice-dialog form > div > button { flex: 1 1 120px; } }
+
+.staff-queue-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.queue-alert-options.is-compact { display: block; margin: 0; padding: 0; border: 0; background: transparent; }
+.alert-settings { position: relative; }
+.alert-settings > summary { list-style: none; cursor: pointer; border: 1px solid #d4dfeb; border-radius: 11px; padding: 11px 16px; background: white; color: #172746; font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.alert-settings > summary::-webkit-details-marker { display: none; }
+.alert-settings > summary:focus-visible { outline: 3px solid #008579; outline-offset: 3px; }
+.alert-settings[open] > summary { border-color: #008579; background: #edf8f5; }
+.alert-settings-panel { position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; width: min(310px, calc(100vw - 40px)); padding: 18px; display: grid; gap: 14px; border: 1px solid #dce5ed; border-radius: 14px; background: white; color: #172746; box-shadow: 0 12px 36px #17274620; }
+.alert-settings-panel small { line-height: 1.5; font-size: .8rem; }
+.alert-settings-panel button { width: 100%; text-align: left; }
+@media (max-width: 520px) { .staff-queue-heading-actions { justify-content: flex-start; width: 100%; } .alert-settings-panel { right: auto; left: 0; } }

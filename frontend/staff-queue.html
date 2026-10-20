@@ -7,6 +7,9 @@
     <title>Live Queue | MediQ Staff</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="staff-dashboard.css" />
+    <link rel="stylesheet" href="action-dialog.css" />
+    <script src="action-dialog.js"></script>
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="staff-body" data-staff-page="queue">
     <header class="staff-header">
@@ -18,16 +21,16 @@
     </header>
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Staff portal">
-        <a href="/staff-dashboard.html"><span aria-hidden="true">⌂</span>Overview</a>
-        <a class="active" href="/staff-queue.html" aria-current="page"><span aria-hidden="true">Q</span>Live queue</a>
-        <a href="/staff-appointments.html"><span aria-hidden="true">□</span>Appointments</a>
-        <a href="/staff-reports.html"><span aria-hidden="true">▤</span>Reports</a>
-        <a href="/staff-profile.html"><span aria-hidden="true">●</span>Profile</a>
+        <a href="/staff-dashboard.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a class="active" href="/staff-queue.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Live queue</a>
+        <a href="/staff-appointments.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/staff-reports.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#reports"></use></svg>Reports</a>
+        <a href="/staff-profile.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
       <main class="staff-main">
         <section class="staff-heading">
           <div><p class="staff-eyebrow">Live operations</p><h1>Live service queues</h1><p>Call the next patient when the clinician is ready. Queue information refreshes every 20 seconds.</p></div>
-          <button id="refresh-button" class="staff-secondary-button" type="button">↻ Refresh queues</button>
+          <div class="staff-queue-heading-actions"><div id="queue-alert-controls"></div><button id="refresh-button" class="staff-secondary-button" type="button">↻ Refresh queues</button></div>
         </section>
         <p id="staff-alert" class="staff-alert" role="status" aria-live="polite" hidden></p>
         <div id="queue-reminder-banner" class="queue-reminder-banner" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
@@ -36,7 +39,8 @@
             <div><h2 id="queue-heading">Today’s queues</h2><p>Current wait follows queue activity. Initial ML or average estimates were made when patients joined.</p></div>
             <span id="last-updated" aria-live="polite"></span>
           </div>
-          <div class="queue-legend" aria-label="Queue statuses"><span class="waiting">Waiting</span><span class="called">Called</span><span class="in-progress">In consultation</span><span class="cancelled">Cancelled</span></div>
+          <div class="queue-legend" aria-label="Queue statuses"><span class="waiting">Waiting</span><span class="called">Called</span><span class="in-progress">In consultation</span><span class="not-present">Not present</span><span class="cancelled">Cancelled</span></div>
+          <div class="queue-tools"><label>Search patients<input id="queue-search" type="search" placeholder="Name or queue number" /></label><label>Status<select id="queue-filter"><option value="">All statuses</option><option value="waiting">Waiting</option><option value="called">Called</option><option value="in_progress">In consultation</option><option value="not_present">Not present</option><option value="cancelled">Cancelled</option></select></label><button id="clear-queue-filters" type="button" class="staff-secondary-button">Clear filters</button><span id="queue-filter-count" role="status"></span></div>
           <div id="service-queues" class="service-queues" aria-live="polite"><p class="staff-loading">Loading live queues…</p></div>
         </section>
       </main>
@@ -50,6 +54,8 @@
       </form>
     </dialog>
     <script src="queue-ticket.js"></script>
+    <script src="queue-tools.js"></script>
+    <script src="queue-alerts.js"></script>
     <script src="staff-dashboard.js"></script>
   </body>
 </html>

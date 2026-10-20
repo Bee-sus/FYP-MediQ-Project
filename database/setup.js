@@ -3,6 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const { migrateAppointments } = require('./appointmentMigration');
+const { migrateReportQuality } = require('./reportQualityMigration');
+const { migratePatientIdentity } = require('./patientIdentityMigration');
+const { migrateQueueTools } = require('./queueToolsMigration');
+const { migrateMissedCalls } = require('./missedCallMigration');
+const { migrateArrival } = require('./arrivalMigration');
 const { migrateAdmin } = require('./adminMigration');
 const { hashPassword, meetsPasswordRules } = require('../backend/src/services/passwordService');
 
@@ -48,6 +53,11 @@ async function setup() {
     await addColumnIfMissing(connection, 'clinic_services', 'service_details', 'VARCHAR(500) NULL AFTER doctor_name');
     await migrateAppointments(connection);
     await migrateAdmin(connection);
+    await migrateArrival(connection);
+    await migrateMissedCalls(connection);
+    await migrateQueueTools(connection);
+    await migratePatientIdentity(connection);
+    await migrateReportQuality(connection);
     await seedControlledAccount(connection, 'staff', process.env.SEED_STAFF_NAME || 'Clinic Staff', process.env.SEED_STAFF_EMAIL, process.env.SEED_STAFF_PASSWORD);
     await seedControlledAccount(connection, 'admin', process.env.SEED_ADMIN_NAME || 'System Administrator', process.env.SEED_ADMIN_EMAIL, process.env.SEED_ADMIN_PASSWORD);
     console.log('MediQ database schema is ready.');

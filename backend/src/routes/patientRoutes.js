@@ -9,8 +9,10 @@ const { validTime, slotIsOpen } = require('../services/clinicScheduleService');
 const { estimateLiveRemainingWait, predictInitialWait } = require('../services/waitPredictionService');
 const { formatQueueTicket } = require('../services/queueTicket');
 
+const { validateIdentity } = require('../services/patientIdentity');
 const router = express.Router();
 const activeStatuses = "'waiting','called','in_progress'";
+const activeTicketStatuses = activeStatuses + ",'not_present'";
 
 async function createAppointmentReminders(patientId) {
   await pool.execute(`INSERT INTO notifications (patient_id, appointment_id, title, message, notification_type)
@@ -23,13 +25,13 @@ async function createAppointmentReminders(patientId) {
 }
 
 function queueSelect(whereClause) {
-  return `SELECT q.id, q.queue_number AS queueNumber, q.status, q.joined_at AS joinedAt,
+  return `SELECT q.id, q.queue_number AS queueNumber, q.status, q.called_at AS calledAt, q.missed_call_at AS missedCallAt, q.join_location AS joinLocation, q.arrived_at AS arrivedAt, q.joined_at AS joinedAt,
                  q.cancelled_at AS cancelledAt, q.cancellation_reason AS cancellationReason,
-                 s.id AS serviceId, s.name AS serviceName,
+                 s.id AS serviceId, s.name AS serviceName, s.delay_notice AS delayNotice, s.delay_notice_updated_at AS delayNoticeUpdatedAt,
                  s.average_duration_minutes AS averageDurationMinutes,
                  (SELECT COUNT(*) FROM queue_entries ahead
                   WHERE ahead.service_id = q.service_id AND ahead.queue_date = q.queue_date
-                    AND ahead.queue_number < q.queue_number AND ahead.status IN (${activeStatuses})) AS peopleAhead,
+                    AND ahead.queue_number < q.queue_number AND ahead.status IN ('waiting','called','in_progress')) AS peopleAhead,
                  (SELECT COUNT(*) FROM queue_entries done
                   WHERE done.service_id = q.service_id AND done.queue_date = q.queue_date
                     AND done.status = 'completed'
@@ -54,13 +56,13 @@ router.get('/overview', ...requireRole('patient'), async (request, response) => 
   try {
     await createAppointmentReminders(request.user.id);
     const [activeQueues] = await pool.execute(
-      `${queueSelect(`q.patient_id = ? AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})`)}
+      `${queueSelect(`q.patient_id = ? AND q.queue_date = CURRENT_DATE AND q.status IN (${activeTicketStatuses})`)}
        ORDER BY q.joined_at DESC LIMIT 1`,
       [request.user.id],
     );
     const [services] = await pool.execute(
       `SELECT s.id, s.name, s.description, s.doctor_name AS doctorName, s.service_details AS serviceDetails, s.average_duration_minutes AS averageDurationMinutes,
-       s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
+       s.delay_notice AS delayNotice, s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
        FROM clinic_services s WHERE s.is_active = TRUE ORDER BY s.name`,
     );
     const [history] = await pool.execute(
@@ -107,7 +109,7 @@ router.get('/services', ...requireRole('patient'), async (request, response) => 
   try {
     const [services] = await pool.execute(
       `SELECT s.id, s.name, s.description, s.doctor_name AS doctorName, s.service_details AS serviceDetails, s.average_duration_minutes AS averageDurationMinutes,
-       s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
+       s.delay_notice AS delayNotice, s.queue_capacity AS queueCapacity, (SELECT COUNT(*) FROM queue_entries q WHERE q.service_id = s.id AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})) AS activePatients
        FROM clinic_services s WHERE s.is_active = TRUE ORDER BY s.name`,
     );
     return response.json({ services });
@@ -116,10 +118,54 @@ router.get('/services', ...requireRole('patient'), async (request, response) => 
   }
 });
 
+router.get('/queues/availability', ...requireRole('patient'), async (request, response) => {
+  try {
+    const [services] = await pool.execute(
+      `SELECT s.id, s.name, s.description, s.doctor_name AS doctorName,
+              s.service_details AS serviceDetails, s.average_duration_minutes AS averageDurationMinutes,
+              s.queue_capacity AS queueCapacity, s.is_queue_open AS isQueueOpen, s.delay_notice AS delayNotice,
+              COUNT(CASE WHEN q.status IN (${activeStatuses}) THEN q.id END) AS activePatients,
+              COALESCE(MAX(q.queue_number), 0) AS lastQueueNumber
+       FROM clinic_services s
+       LEFT JOIN queue_entries q ON q.service_id = s.id AND q.queue_date = CURRENT_DATE
+       WHERE s.is_active = TRUE
+       GROUP BY s.id, s.name, s.description, s.doctor_name, s.service_details,
+                s.average_duration_minutes, s.queue_capacity, s.is_queue_open, s.delay_notice
+       ORDER BY s.name`,
+    );
+    const availability = await Promise.all(services.map(async (service) => {
+      const activePatients = Number(service.activePatients) || 0;
+      const queueCapacity = service.queueCapacity == null ? null : Number(service.queueCapacity);
+      const isQueueOpen = Boolean(Number(service.isQueueOpen));
+      const isFull = queueCapacity != null && queueCapacity > 0 && activePatients >= queueCapacity;
+      const { lastQueueNumber, ...publicService } = service;
+      if (!isQueueOpen || isFull) {
+        return { ...publicService, activePatients, queueCapacity, isQueueOpen, estimatedWaitMinutes: null, estimateSource: null };
+      }
+      const prediction = await predictInitialWait({
+        connection: pool,
+        serviceId: service.id,
+        aheadCount: Number(lastQueueNumber) || 0,
+        baselineAheadCount: activePatients,
+        averageDurationMinutes: service.averageDurationMinutes,
+      });
+      return {
+        ...publicService, activePatients, queueCapacity, isQueueOpen,
+        estimatedWaitMinutes: prediction.estimatedMinutes,
+        estimateSource: prediction.modelVersion,
+      };
+    }));
+    response.set('Cache-Control', 'no-store');
+    return response.json({ services: availability, updatedAt: new Date().toISOString() });
+  } catch (error) {
+    return response.status(503).json({ error: 'Current queue availability is temporarily unavailable.' });
+  }
+});
+
 router.get('/queues/active', ...requireRole('patient'), async (request, response) => {
   try {
     const [rows] = await pool.execute(
-      `${queueSelect(`q.patient_id = ? AND q.queue_date = CURRENT_DATE AND q.status IN (${activeStatuses})`)}
+      `${queueSelect(`q.patient_id = ? AND q.queue_date = CURRENT_DATE AND q.status IN (${activeTicketStatuses})`)}
        ORDER BY q.joined_at DESC LIMIT 1`,
       [request.user.id],
     );
@@ -131,6 +177,8 @@ router.get('/queues/active', ...requireRole('patient'), async (request, response
 });
 
 router.post('/queues', ...requireRole('patient'), async (request, response) => {
+  const joinLocation = request.body.joinLocation ?? 'unknown';
+  if (!['at_clinic', 'remote', 'unknown'].includes(joinLocation)) return response.status(422).json({ error: 'Choose whether you are at the clinic or joining remotely.' });
   const serviceId = Number(request.body.serviceId);
   if (!Number.isSafeInteger(serviceId) || serviceId < 1) {
     return response.status(422).json({ error: 'Select a valid clinic service.' });
@@ -144,7 +192,7 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
 
     const [existing] = await connection.execute(
       `SELECT id FROM queue_entries
-       WHERE patient_id = ? AND queue_date = CURRENT_DATE AND status IN (${activeStatuses})
+       WHERE patient_id = ? AND queue_date = CURRENT_DATE AND status IN (${activeTicketStatuses})
        LIMIT 1`,
       [request.user.id],
     );
@@ -187,9 +235,9 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
     });
     const estimatedMinutes = prediction.estimatedMinutes;
     const [queueResult] = await connection.execute(
-      `INSERT INTO queue_entries (patient_id, service_id, queue_date, queue_number, status)
-       VALUES (?, ?, CURRENT_DATE, ?, 'waiting')`,
-      [request.user.id, serviceId, queueNumber],
+      `INSERT INTO queue_entries (patient_id, service_id, queue_date, queue_number, status, join_location, arrived_at, is_test_visit)
+       VALUES (?, ?, CURRENT_DATE, ?, 'waiting', ?, IF(? = 'at_clinic', CURRENT_TIMESTAMP, NULL), ?)`,
+      [request.user.id, serviceId, queueNumber, joinLocation, joinLocation, process.env.QUEUE_VISIT_MODE === 'operational' ? 0 : 1],
     );
     await connection.execute(
       `INSERT INTO waiting_time_predictions
@@ -211,6 +259,7 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
         serviceId,
         serviceName: services[0].name,
         status: 'waiting',
+        joinLocation,
         peopleAhead,
         estimatedMinutes,
         predictionModel: prediction.modelVersion,
@@ -249,7 +298,7 @@ router.post('/queues/:queueId/cancel', ...requireRole('patient'), async (request
       await connection.rollback();
       return response.status(404).json({ error: 'Queue entry was not found.' });
     }
-    if (!['waiting', 'called'].includes(rows[0].status)) {
+    if (!['waiting', 'called', 'not_present'].includes(rows[0].status)) {
       await connection.rollback();
       return response.status(409).json({ error: 'This queue can no longer be cancelled.' });
     }
@@ -437,7 +486,7 @@ router.patch('/notifications/read-all', ...requireRole('patient'), async (reques
 router.get('/profile', ...requireRole('patient'), async (request, response) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT id, full_name AS fullName, email, phone_number AS phone, birth_date AS birthDate, gender, created_at AS createdAt
+      `SELECT id, full_name AS fullName, email, phone_number AS phone, birth_date AS birthDate, TIMESTAMPDIFF(YEAR, birth_date, CURRENT_DATE) AS age, identification_type AS identificationType, identification_number AS identificationNumber, gender, created_at AS createdAt
        FROM users WHERE id = ? AND role = 'patient' LIMIT 1`,
       [request.user.id],
     );
@@ -448,18 +497,20 @@ router.get('/profile', ...requireRole('patient'), async (request, response) => {
 });
 
 router.patch('/profile', ...requireRole('patient'), async (request, response) => {
+  const updateIdentity = Object.hasOwn(request.body, 'identificationType') || Object.hasOwn(request.body, 'identificationNumber');
+  const identity = validateIdentity(request.body);
   const fullName = String(request.body.fullName || '').trim();
   const phone = String(request.body.phone || '').trim();
   const gender = String(request.body.gender || '');
   const digits = phone.replace(/\D/g, '');
   const genders = new Set(['female', 'male', 'other', 'prefer-not-to-say']);
-  const errors = {};
+  const errors = { ...identity.errors };
   if (fullName.length < 2 || fullName.length > 120 || !/^[\p{L}][\p{L} .'-]+$/u.test(fullName)) errors.fullName = 'Enter a valid full name.';
   if (!/^[+0-9 ()-]+$/.test(phone) || digits.length < 8 || digits.length > 15) errors.phone = 'Enter a valid phone number with 8–15 digits.';
   if (!genders.has(gender)) errors.gender = 'Select a gender option.';
   if (Object.keys(errors).length) return response.status(422).json({ error: 'Check the highlighted fields.', fields: errors });
   try {
-    await pool.execute('UPDATE users SET full_name = ?, phone_number = ?, gender = ? WHERE id = ? AND role = \'patient\'', [fullName, phone, gender, request.user.id]);
+    await pool.execute(`UPDATE users SET full_name = ?, phone_number = ?, gender = ?${updateIdentity ? ', identification_type = ?, identification_number = ?' : ''} WHERE id = ? AND role = 'patient'`, [fullName, phone, gender, ...(updateIdentity ? [identity.type, identity.number] : []), request.user.id]);
     return response.json({ message: 'Profile updated.', profile: { fullName, phone, gender } });
   } catch (error) {
     return response.status(503).json({ error: 'The profile could not be updated.' });

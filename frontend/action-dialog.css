@@ -1,0 +1,15 @@
+.mediq-action-dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; padding: 28px; border: 1px solid #dce5ed; border-radius: 20px; background: #fff; color: #172746; box-shadow: 0 24px 80px #12243b33; font-family: inherit; }
+.mediq-action-dialog::backdrop { background: #12243b88; backdrop-filter: blur(3px); }
+.mediq-dialog-eyebrow { margin: 0 0 10px; color: #008579; font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.mediq-action-dialog h2 { margin: 0 0 12px; font-size: 1.5rem; line-height: 1.25; }
+.mediq-action-dialog #mediq-action-message { margin: 0 0 22px; color: #60728b; line-height: 1.6; overflow-wrap: anywhere; }
+.mediq-dialog-reason { display: grid; gap: 8px; font-size: .9rem; font-weight: 650; }
+.mediq-dialog-reason[hidden] { display: none; }
+.mediq-dialog-reason textarea { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #b9c9d8; border-radius: 10px; resize: vertical; font: inherit; font-weight: 400; }
+.mediq-action-dialog :focus-visible { outline: 3px solid #008579; outline-offset: 3px; }
+.mediq-dialog-reason small { color: #60728b; font-weight: 400; }
+#mediq-reason-error { color: #b42330; font-weight: 400; }
+.mediq-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.mediq-dialog-actions button { padding: 11px 18px; border-radius: 10px; border: 1px solid #d4dfeb; background: white; color: #172746; font: inherit; font-weight: 650; cursor: pointer; }
+.mediq-dialog-actions .mediq-dialog-confirm { background: #008579; color: white; border-color: transparent; }
+.mediq-dialog-actions .is-danger { background: #bc3040; }

@@ -24,6 +24,7 @@ function alertMessage(message, error = false) {
   const alert = $('#admin-alert');
   alert.textContent = message;
   alert.className = 'staff-alert' + (error ? ' error' : '');
+  alert.setAttribute('role', error ? 'alert' : 'status');
   alert.hidden = false;
 }
 async function run(work) {
@@ -89,13 +90,13 @@ async function loadStaff() {
     element.querySelector('.staff-created').textContent = new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium' }).format(new Date(person.createdAt));
     const actions = element.querySelector('.admin-card-actions');
     actions.append(button(person.isActive ? 'Deactivate' : 'Activate', async () => {
-      if (!window.confirm(person.isActive ? `Deactivate ${person.fullName}? Their sessions will be signed out.` : `Restore staff access for ${person.fullName}?`)) return;
+      if (!(await window.mediqDialog({ title: person.isActive ? 'Deactivate staff account?' : 'Restore staff access?', message: person.isActive ? `Deactivate ${person.fullName}? Their sessions will be signed out.` : `Restore staff access for ${person.fullName}?`, confirmLabel: person.isActive ? 'Deactivate' : 'Restore access', danger: Boolean(person.isActive) }))) return;
       const result = await adminApi('/staff/' + person.id, json('PATCH', { isActive: !Boolean(person.isActive) }));
       alertMessage(result.message);
       await loadStaff();
     }));
     actions.append(button('Delete permanently', async () => {
-      if (!window.confirm(`Permanently delete ${person.fullName}'s Staff account? This removes their login, sessions and Staff audit history and cannot be undone.`)) return;
+      if (!(await window.mediqDialog({ title: 'Delete staff account?', message: `Permanently delete ${person.fullName}'s Staff account? This removes their login, sessions and Staff audit history and cannot be undone.`, confirmLabel: 'Delete permanently', danger: true }))) return;
       const result = await adminApi('/staff/' + person.id, { method: 'DELETE' });
       alertMessage(result.message);
       await loadStaff();
@@ -264,7 +265,7 @@ $('#hours-form').addEventListener('submit', event => {
   });
 });
 $('#reload-hours').addEventListener('click', () => run(async () => {
-  if (scheduleDirty && !window.confirm('Discard your unsaved hours and reload the saved schedule?')) return;
+  if (scheduleDirty && !(await window.mediqDialog({ title: 'Discard unsaved changes?', message: 'Discard your unsaved hours and reload the saved schedule?', confirmLabel: 'Discard changes', danger: true }))) return;
   $('#reload-hours').disabled = true;
   try { await loadHours(); } finally { $('#reload-hours').disabled = false; }
 }));
@@ -342,7 +343,7 @@ $('#audit-filter-form').addEventListener('submit', event => { event.preventDefau
 $('#audit-previous').addEventListener('click', () => run(() => loadAudit(auditPage - 1)));
 $('#audit-next').addEventListener('click', () => run(() => loadAudit(auditPage + 1)));
 $('#logout-button').addEventListener('click', () => run(async () => {
-  if (scheduleDirty && !window.confirm('Sign out and discard unsaved hours?')) return;
+  if (scheduleDirty && !(await window.mediqDialog({ title: 'Sign out?', message: 'Sign out and discard unsaved hours?', confirmLabel: 'Sign out', danger: true }))) return;
   const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
   if (!response.ok && response.status !== 401) throw new Error('Sign-out failed. Please try again.');
   scheduleDirty = false;

@@ -12,24 +12,25 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="auth.css" />
+    <link rel="stylesheet" href="role-login.css" />
   </head>
-  <body>
+  <body class="admin-login-body">
     <aside class="auth-introduction">
       <a class="brand" href="/">Medi<span>Q</span><small>Clinic name pending</small></a>
-      <div class="auth-introduction-copy">
+      <div class="auth-introduction-copy"><div class="auth-role-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 4-4 7-8 9-4-2-8-5-8-9V6Zm-4 9 3 3 5-6" /></svg></div>
         <p class="eyebrow">Administrator access</p>
         <h1>Control access and clinic settings.</h1>
         <p>
           This portal is restricted to designated system administrators. Administrator accounts cannot be
           registered publicly.
         </p>
-      </div>
+      <ul class="auth-role-features"><li>Staff accounts and access</li><li>Clinic services and opening hours</li><li>Patient records and activity logs</li></ul></div>
       <a class="back-link" href="/">← Back to homepage</a>
     </aside>
 
     <main class="auth-main">
       <section class="auth-card" aria-labelledby="admin-login-heading">
-        <p class="eyebrow">Restricted access</p>
+        <p class="eyebrow">Administration console</p>
         <h2 id="admin-login-heading">Administrator sign in</h2>
         <p class="auth-subtitle">Use the credentials issued through the clinic's controlled account process.</p>
 

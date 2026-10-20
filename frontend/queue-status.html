@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="portal-polish.css" />
   </head>
   <body class="portal-body">
     <header class="portal-header">
@@ -21,16 +22,14 @@
     </header>
     <div class="portal-layout">
       <nav class="portal-nav" aria-label="Patient portal">
-        <a href="/patient-dashboard.html"><span aria-hidden="true">⌂</span> Overview</a>
-        <a href="/patient-services.html"><span aria-hidden="true">✚</span> Clinic services</a>
-        <a href="/join-queue.html"><span aria-hidden="true">＋</span> Join queue</a>
-        <a class="active" href="/queue-status.html" aria-current="page">
-          <span aria-hidden="true">Q</span> Queue status
-        </a>
-        <a href="/appointments.html"><span aria-hidden="true">□</span> Appointments</a>
-        <a href="/notifications.html"><span aria-hidden="true">○</span> Notifications</a>
-        <a href="/queue-history.html"><span aria-hidden="true">↻</span> Queue history</a>
-        <a href="/patient-profile.html"><span aria-hidden="true">◎</span> Profile</a>
+        <a href="/patient-dashboard.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <a href="/patient-services.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#services"></use></svg>Clinic services</a>
+        <a href="/join-queue.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#join"></use></svg>Join queue</a>
+        <a class="active" href="/queue-status.html" aria-current="page"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#queue"></use></svg>Queue status</a>
+        <a href="/appointments.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#appointments"></use></svg>Appointments</a>
+        <a href="/notifications.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#notifications"></use></svg>Notifications</a>
+        <a href="/queue-history.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#history"></use></svg>Queue history</a>
+        <a href="/patient-profile.html"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#profile"></use></svg>Profile</a>
       </nav>
       <main class="patient-main narrow-patient-main">
         <section class="patient-heading queue-page-heading">
@@ -42,27 +41,31 @@
           </div>
           <button id="refresh-queue" class="refresh-button" type="button"><span aria-hidden="true">↻</span> Refresh status</button>
         </section>
+        <div id="queue-alert-controls"></div>
         <p id="status-alert" class="dashboard-alert" role="status" aria-live="polite" hidden></p>
         <section id="queue-status-content" aria-live="polite"><p class="dashboard-loading">Loading your queue…</p></section>
       </main>
     </div>
 
-    <dialog id="cancel-dialog" class="cancel-dialog" aria-labelledby="cancel-heading">
-      <form id="cancel-form" method="dialog">
+    <dialog id="cancel-dialog" class="cancel-dialog portal-form-dialog" aria-labelledby="cancel-heading">
+      <form id="cancel-form" class="dialog-form-layout" method="dialog">
+        <header class="dialog-form-header">
         <p class="eyebrow">Cancel queue</p>
         <h2 id="cancel-heading">Why are you leaving the queue?</h2>
-        <p>Your queue entry will remain in your history as cancelled.</p>
+        <p>Your queue entry will remain in your history as cancelled.</p></header>
+        <div class="dialog-form-body">
         <label for="cancellation-reason">Cancellation reason</label>
         <textarea id="cancellation-reason" minlength="3" maxlength="300" rows="4" required></textarea>
         <p id="cancel-error" class="field-error" role="alert"></p>
-        <div class="dialog-actions">
+        </div><footer class="dialog-form-footer">
           <button id="keep-queue" class="action-button secondary-action" type="button">Keep my place</button>
           <button class="danger-button" type="submit">Cancel queue</button>
-        </div>
+        </footer>
       </form>
     </dialog>
     <script src="queue-ticket.js"></script>
     <script src="queue-estimate.js"></script>
+    <script src="queue-alerts.js"></script>
     <script src="queue-status.js"></script>
   </body>
 </html>

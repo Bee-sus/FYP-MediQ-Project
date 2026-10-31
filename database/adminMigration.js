@@ -11,6 +11,7 @@ async function migrateAdmin(connection) {
     ['users', 'profile_picture_url', 'VARCHAR(500) NULL AFTER staff_code'],
     ['users', 'must_change_password', 'BOOLEAN NOT NULL DEFAULT FALSE AFTER is_active'],
     ['users', 'email_verified_at', 'TIMESTAMP NULL AFTER must_change_password'],
+    ['users', 'deleted_at', 'TIMESTAMP NULL AFTER email_verified_at'],
     ['clinic_services', 'doctor_name', 'VARCHAR(120) NULL AFTER description'],
     ['clinic_services', 'service_details', 'VARCHAR(500) NULL AFTER doctor_name'],
     ['clinic_services', 'queue_capacity', 'INT UNSIGNED NULL AFTER average_duration_minutes'],

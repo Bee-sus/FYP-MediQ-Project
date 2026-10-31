@@ -3,6 +3,7 @@ let scheduleRevision = null;
 let scheduleDirty = false;
 let editingServiceId = null;
 let auditPage = 1;
+let patientPage = 1;
 const loaded = new Set();
 const adminPicture = setupProfilePicturePicker($('#create-staff-form .profile-picture-field'), $('#create-staff-form [name="fullName"]'));
 
@@ -95,12 +96,18 @@ async function loadStaff() {
       alertMessage(result.message);
       await loadStaff();
     }));
-    actions.append(button('Delete permanently', async () => {
-      if (!(await window.mediqDialog({ title: 'Delete staff account?', message: `Permanently delete ${person.fullName}'s Staff account? This removes their login, sessions and Staff audit history and cannot be undone.`, confirmLabel: 'Delete permanently', danger: true }))) return;
-      const result = await adminApi('/staff/' + person.id, { method: 'DELETE' });
-      alertMessage(result.message);
-      await loadStaff();
-    }, 'staff-danger-button'));
+    if (!Number(person.hasActivityHistory)) {
+      actions.append(button('Delete permanently', async () => {
+        if (!(await window.mediqDialog({ title: 'Delete unused staff account?', message: `Permanently delete ${person.fullName}'s unused Staff account? This removes their login and sessions and cannot be undone. Accounts with activity history must be deactivated instead.`, confirmLabel: 'Delete permanently', danger: true }))) return;
+        const result = await adminApi('/staff/' + person.id, { method: 'DELETE' });
+        alertMessage(result.message);
+        await loadStaff();
+      }, 'staff-danger-button'));
+    } else {
+      const historyNote = document.createElement('small');
+      historyNote.textContent = 'Activity history retained. Deactivate this account to remove access.';
+      actions.append(historyNote);
+    }
     return element;
   }));
   if (!staff.length) $('#staff-list').textContent = 'No staff accounts yet. Create the first account using this form.';
@@ -294,11 +301,21 @@ async function loadAudit(page = 1) {
 
 async function loadPatients() {
   const query = new FormData($('#patient-search-form')).get('query') || '';
-  const data = await adminApi('/patients?query=' + encodeURIComponent(query));
+  const data = await adminApi('/patients?query=' + encodeURIComponent(query)+'&page='+patientPage);
+  $('#patient-page').textContent='Page '+data.page;$('#patient-previous').disabled=data.page<=1;$('#patient-next').disabled=!data.hasMore;
   $('#patient-details').replaceChildren();
   $('#patient-list').replaceChildren(...data.patients.map(patient => {
     const element = card(patient.fullName, `${patient.email} · ${patient.phone || 'No contact number'}`);
+    const state=document.createElement('div');state.className='patient-account-state';state.append(badge(Boolean(patient.isActive)));const verified=document.createElement('span');verified.textContent=patient.verifiedAt?'Email verified':'Awaiting email verification';state.append(verified);element.querySelector('p').after(state);
     element.querySelector('.admin-card-actions').append(button('View history', () => loadPatientDetails(patient.id)));
+    element.querySelector('.admin-card-actions').append(button(patient.isActive?'Deactivate':'Reactivate',async()=>{
+      if(!(await window.mediqDialog({title:patient.isActive?'Deactivate patient?':'Reactivate patient?',message:patient.isActive?'This patient will be signed out and unable to sign in. Their visit history will be kept.':'This patient will be able to sign in again after email verification.',confirmLabel:patient.isActive?'Deactivate':'Reactivate'})))return;
+      const result=await adminApi('/patients/'+patient.id,json('PATCH',{isActive:!Boolean(patient.isActive)}));alertMessage(result.message);await loadPatients();
+    }));
+    element.querySelector('.admin-card-actions').append(button('Delete account',async()=>{
+      if(!(await window.mediqDialog({title:'Delete patient account?',message:'This permanently removes the patient’s account details and login access. Linked clinic visit history is retained anonymously. Active queue entries and appointments must be completed or cancelled first. This cannot be undone.',confirmLabel:'Delete account',danger:true})))return;
+      const result=await adminApi('/patients/'+patient.id,{method:'DELETE'});alertMessage(result.message);await loadPatients();
+    },'staff-danger-button'));
     return element;
   }));
   if (!data.patients.length) $('#patient-list').textContent = 'No patients match this search.';
@@ -309,6 +326,10 @@ async function loadPatientDetails(id) {
   panel.innerHTML = '<article class="admin-card patient-history"><div class="staff-section-heading"><div><h3></h3><p class="patient-contact"></p></div><button type="button" class="staff-secondary-button close-patient-history">Close</button></div><div class="patient-history-columns"><section><h4>Queue history</h4><div class="queue-history-list"></div></section><section><h4>Appointments</h4><div class="appointment-history-list"></div></section></div></article>';
   panel.querySelector('h3').textContent = data.patient.fullName;
   panel.querySelector('.patient-contact').textContent = `${data.patient.email} · ${data.patient.phone || 'No contact number'}`;
+  const edit=document.createElement('form');edit.className='patient-account-edit';edit.innerHTML='<h4>Account details</h4><label>Full name<input name="fullName" minlength="2" maxlength="120" required /></label><label>Contact number<input name="phone" type="tel" maxlength="30" required /></label><button type="submit" class="staff-primary-button">Save details</button><p role="status"></p>';
+  edit.elements.fullName.value=data.patient.fullName;edit.elements.phone.value=data.patient.phone||'';
+  edit.onsubmit=async event=>{event.preventDefault();const submit=edit.querySelector('button');submit.disabled=true;try{const result=await adminApi('/patients/'+id,json('PATCH',Object.fromEntries(new FormData(edit))));edit.querySelector('p').textContent=result.message;panel.querySelector('h3').textContent=edit.elements.fullName.value;panel.querySelector('.patient-contact').textContent=data.patient.email+' · '+edit.elements.phone.value;loaded.delete('patients');}catch(error){edit.querySelector('p').textContent=error.message;}finally{submit.disabled=false;}};
+  panel.querySelector('.patient-history-columns').before(edit);
   const makeRows = items => items.map(item => { const row = document.createElement('p'); row.textContent = `${String(item.queueDate || item.appointmentDate).slice(0, 10)} · ${item.serviceName} · ${item.status}`; return row; });
   panel.querySelector('.queue-history-list').replaceChildren(...makeRows(data.queues));
   panel.querySelector('.appointment-history-list').replaceChildren(...makeRows(data.appointments));
@@ -321,7 +342,9 @@ async function loadSettings() {
   for (const key of ['clinicName', 'address', 'phone', 'timezone']) form.elements[key].value = settings[key] || '';
   document.querySelectorAll('.brand small').forEach(item => { item.textContent = settings.clinicName; });
 }
-$('#patient-search-form').addEventListener('submit', event => { event.preventDefault(); run(loadPatients); });
+$('#patient-search-form').addEventListener('submit', event => { event.preventDefault();patientPage=1;run(loadPatients); });
+$('#patient-previous').onclick=()=>{patientPage=Math.max(1,patientPage-1);run(loadPatients);};
+$('#patient-next').onclick=()=>{patientPage++;run(loadPatients);};
 $('#settings-form').addEventListener('submit', event => { event.preventDefault(); run(async () => { const result = await adminApi('/settings', json('PUT', Object.fromEntries(new FormData(event.currentTarget)))); alertMessage(result.message); await loadSettings(); }); });
 const loaders = { overview: loadOverview, staff: loadStaff, services: loadServices, hours: loadHours, patients: loadPatients, settings: loadSettings, activity: loadAudit };
 async function showPanel() {

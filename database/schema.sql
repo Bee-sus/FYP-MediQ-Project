@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
   email_verified_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -57,7 +58,9 @@ CREATE TABLE IF NOT EXISTS clinic_services (
   delay_notice VARCHAR(300) NULL,
   delay_notice_updated_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT uq_service_name UNIQUE (name)
+  CONSTRAINT uq_service_name UNIQUE (name),
+  CONSTRAINT ck_service_duration CHECK (average_duration_minutes BETWEEN 1 AND 240),
+  CONSTRAINT ck_service_capacity CHECK (queue_capacity IS NULL OR queue_capacity BETWEEN 1 AND 500)
 );
 
 CREATE TABLE IF NOT EXISTS clinic_settings (
@@ -89,6 +92,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   CONSTRAINT fk_queue_patient FOREIGN KEY (patient_id) REFERENCES users(id),
   CONSTRAINT fk_queue_service FOREIGN KEY (service_id) REFERENCES clinic_services(id),
   CONSTRAINT uq_service_daily_queue UNIQUE (service_id, queue_date, queue_number),
+  CONSTRAINT ck_queue_number_positive CHECK (queue_number > 0),
   INDEX idx_active_queue (service_id, queue_date, status)
 );
 
@@ -103,7 +107,9 @@ CREATE TABLE IF NOT EXISTS waiting_time_predictions (
   joined_hour TINYINT UNSIGNED NULL,
   joined_weekday TINYINT UNSIGNED NULL,
   actual_wait_minutes DECIMAL(6,2) NULL,
-  CONSTRAINT fk_prediction_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id)
+  CONSTRAINT fk_prediction_queue FOREIGN KEY (queue_entry_id) REFERENCES queue_entries(id),
+  CONSTRAINT ck_prediction_estimated_nonnegative CHECK (estimated_minutes >= 0),
+  CONSTRAINT ck_prediction_actual_nonnegative CHECK (actual_wait_minutes IS NULL OR actual_wait_minutes >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS appointment_booking_lock (

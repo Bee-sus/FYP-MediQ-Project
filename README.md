@@ -61,6 +61,7 @@ ml-service/    Python/FastAPI prediction-service boundary
 3. Run `database/schema.sql` and then `database/admin-schema.sql` using MySQL Workbench.
    Alternatively, add your database credentials and controlled demo accounts to `.env`, then run `npm run db:setup`.
    For an existing MediQ database, run `npm run db:migrate:appointments` and `npm run db:migrate:admin` to add the newer tables and columns while preserving existing accounts and appointments.
+   Then run `npm run db:migrate:integrity` on MySQL 8.0.16 or later. It checks all existing records before adding database checks for positive queue numbers, valid service duration/capacity, non-negative estimates and valid weekly hours. If incompatible rows exist, it stops without rewriting or deleting them.
 4. Install dependencies and start the server:
 
 ```bash
@@ -76,7 +77,13 @@ The public pages still load if MySQL has not been configured, but registration a
 
 Staff and Administrator accounts are never publicly registered. Configure `SEED_STAFF_*` and `SEED_ADMIN_*` in `.env`; `npm run db:setup` creates or refreshes those controlled demonstration accounts using scrypt password hashes.
 
-New Patient accounts and Administrator-created Staff accounts must verify their email before signing in. Set `APP_BASE_URL` and the `SMTP_*` values in `.env` to send verification messages. Without SMTP, the registration or Staff-creation response provides a development verification link; this link is not returned in production.
+Application database connections explicitly use Malaysia time (`+08:00`); date-only fields stay `YYYY-MM-DD` strings so dates do not shift during JSON serialization. Existing timestamp values are not rewritten. Deactivate Staff accounts that have activity history: their audit records are preserved, and the API permits permanent deletion only when no Staff activity history exists.
+
+Run `npm test` for the automated suite. `npm run test:db:integrity` additionally creates a disposable database to verify queue-call concurrency, handoffs, missed-call service protection, Staff audit retention, date handling and enforced checks against real MySQL. It requires database creation privileges and removes only its own temporary database.
+
+New Patient accounts verify their email in a registration pop-up using a six-digit code. Select Send verification code, then enter the code within 10 minutes. Codes are single-use, with five verification attempts, a 60-second resend cooldown and five sends per hour. Patients can sign in with their password to resume unfinished verification. Staff retain email-link verification and temporary-password replacement. Set `APP_BASE_URL` and `SMTP_*` in `.env` for real delivery. Explicit non-production `EMAIL_DELIVERY_MODE=preview` shows a local test code; production never returns it.
+
+Administrator Patient accounts supports contact-detail edits, activation/deactivation and permanent removal of account details. Deactivation revokes sessions. Deletion is blocked while queue entries or appointments are active; otherwise it anonymises identity and contact fields, revokes sessions and verification tokens, and retains linked clinic visit history. Deleted accounts cannot be reactivated. Staff cannot access these management endpoints. Run `npm run db:migrate:admin` to add the OTP table and account-deletion marker without seeding or changing existing credentials.
 
 For local demonstration accounts, set `EMAIL_DELIVERY_MODE=preview` in `.env` and restart the web server. Register patients with distinct test-only addresses such as `patient1@example.test` and `patient2@example.test`. No email is sent: the registration page displays **Open local verification link**. Open that link once, then sign in with the password you chose. This setting works even if SMTP credentials are present, but is ignored when `NODE_ENV=production`. Use `EMAIL_DELIVERY_MODE=smtp` to test real delivery. A preview link tests MediQ's token-verification flow; it does not prove ownership of an email inbox. Existing unverified local accounts can request a fresh link through **Get a new verification link** on the sign-in page.
 

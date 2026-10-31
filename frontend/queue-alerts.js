@@ -53,6 +53,17 @@ window.createQueueAlerts = function (role, container) {
     catch (_) { message.textContent = 'Browser alerts could not be enabled. Your on-page updates still work.'; }
   });
   function deliver(title, body) {
+    if (role === 'patient') {
+      let popup = document.querySelector('#patient-call-popup');
+      if (!popup) {
+        popup = document.createElement('dialog'); popup.id = 'patient-call-popup';
+        popup.style.cssText = 'width:min(440px,90vw);padding:32px;border:1px solid #dce5f2;border-radius:20px;box-shadow:0 24px 80px #14213d40';
+        popup.innerHTML = '<h2></h2><p></p><form method="dialog"><button class="submit-button" style="padding:12px 24px">Understood</button></form>';
+        document.body.append(popup);
+      }
+      popup.querySelector('h2').textContent = title; popup.querySelector('p').textContent = body;
+      if (!popup.open) popup.showModal();
+    }
     toast.querySelector('span').textContent = `${title} — ${body}`;
     toast.hidden = false;
     beep();

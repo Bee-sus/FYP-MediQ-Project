@@ -5,7 +5,28 @@ const {pool}=require('../src/config/database');
 const model='operational-f4-hist-gradient-boosting-v1';
 const visit=(id,extra={})=>({id,serviceId:1,queueNumber:id,serviceName:'General',status:'completed',isTestVisit:0,consultationStartedAt:'2026-10-20',waitMinutes:10,consultationMinutes:15,predictedMinutes:12,predictionModel:model,...extra});
 const build=(rows,query={})=>buildQualityReport(rows,'2026-10-20','2026-10-20',reportOptions(query),model);
+
+test('monthly completion totals cover all included rows and respect the service filter', () => {
+ const rows=[visit(1,{joinedAt:'2026-09-01'}),visit(2,{joinedAt:'2026-10-01'}),visit(3,{joinedAt:'2026-10-02',status:'cancelled'}),visit(4,{joinedAt:'2026-10-03',serviceId:2,serviceName:'Dental'})];
+ const report=buildQualityReport(rows,'2026-09-01','2026-10-31',{...reportOptions({}),serviceId:1},model);
+ expect(report.summary.totalPatients).toBe(3);
+ expect(report.monthly).toEqual([{month:'2026-09',serviceName:'General',total:1,completed:1,cancelled:0},{month:'2026-10',serviceName:'General',total:2,completed:1,cancelled:1}]);
+ expect(report.availableServices).toHaveLength(2);
+});
 afterEach(()=>jest.restoreAllMocks());afterAll(()=>pool.end());
+
+test('service selection scopes review records and quality totals as well as charts',()=>{
+ const report=buildQualityReport([visit(1),visit(2,{serviceId:2,serviceName:'Dental',waitMinutes:900})],'2026-10-01','2026-10-31',{...reportOptions({}),serviceId:1},model);
+ expect(report.quality.totalVisits).toBe(1);expect(report.quality.flaggedVisits).toBe(0);expect(report.visits.every(v=>v.serviceId===1)).toBe(true);
+});
+
+test('waiting histogram uses full measured report data and correct boundaries',()=>{
+ const rows=Array.from({length:205},(_,i)=>visit(i,{waitMinutes:[0,15,30,60,14.9][i%5]}));
+ const report=build(rows);
+ expect(report.visits).toHaveLength(200);
+ expect(report.waitDistribution.map(v=>v.count)).toEqual([82,41,41,41]);
+ expect(report.waitDistribution.reduce((sum,v)=>sum+v.count,0)).toBe(report.summary.measuredWaitVisits);
+});
 test('test and unclassified visits are excluded by default without guessing',()=>{
  const report=build([visit(1),visit(2,{isTestVisit:1,waitMinutes:900}),visit(3,{isTestVisit:null})]);
  expect(report.summary.totalPatients).toBe(1);expect(report.summary.averageWaitMinutes).toBe(10);

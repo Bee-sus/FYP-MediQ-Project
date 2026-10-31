@@ -118,3 +118,25 @@ body {
 .verify-action { display: grid; place-items: center; margin-top: 16px; text-decoration: none; }
 .verify-home-link { display: inline-block; margin-top: 22px; color: var(--blue-dark); font-size: 13px; font-weight: 700; text-decoration: none; }
 .verify-home-link:hover { text-decoration: underline; }
+body.verify-body { grid-template-columns:minmax(0,1fr);min-height:100vh;min-height:100svh;align-content:center;justify-items:center;padding:32px 18px; }
+body.verify-body .verify-page { width:min(100%,580px);margin:0 auto; }
+.verify-card [hidden],.patient-otp-dialog [hidden] { display:none!important; }
+.patient-otp-dialog { width:min(480px,calc(100% - 32px));max-height:calc(100svh - 48px);overflow:auto;box-sizing:border-box;margin:auto;padding:36px;border:1px solid #dce5f2;border-radius:22px;background:#fff;color:var(--ink);box-shadow:0 24px 100px #14213d33;text-align:center; }
+.patient-otp-dialog::backdrop { background:rgba(15,29,52,.5);backdrop-filter:blur(4px); }
+.otp-close { position:absolute;right:16px;top:12px;width:34px;height:34px;border:0;border-radius:50%;font-size:25px;background:#f3f6fa;color:var(--muted);cursor:pointer; }
+.otp-symbol { display:grid;place-items:center;width:60px;height:60px;margin:0 auto 20px;border-radius:18px;background:var(--blue-soft);color:var(--blue);font-size:28px;font-weight:700; }
+.patient-otp-dialog .eyebrow { font-size:.72rem;margin:0 0 10px; }
+.patient-otp-dialog h2 { margin:0;font-size:1.6rem;letter-spacing:-.035em; }
+.otp-description { margin:15px 0 24px;color:var(--muted);font-size:.88rem;line-height:1.7;overflow-wrap:anywhere; }
+.patient-otp-dialog .submit-button { width:100%;padding:13px 16px;min-height:46px; }
+.otp-code-form { display:grid;gap:12px;margin-top:20px;text-align:left; }
+.otp-code-form label { font-size:.85rem;font-weight:700; }
+.otp-code-form input { width:100%;padding:14px 16px;border:1px solid #c9d8ef;border-radius:10px;font-size:1.7rem;letter-spacing:.35em;text-align:center;box-sizing:border-box; }
+.otp-code-form input:focus { outline:3px solid #dfeaff;border-color:var(--blue); }
+.otp-code-form small { color:var(--muted);font-size:.76rem;line-height:1.5; }
+.otp-result { min-height:20px;margin:18px 0 0;font-size:.85rem;line-height:1.6;color:var(--muted); }
+.otp-continue { display:block;margin-top:20px;text-decoration:none;box-sizing:border-box; }
+.otp-resume { border:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;text-decoration:underline; }
+.patient-otp-dialog button:disabled { opacity:.65;cursor:wait; }
+.patient-otp-dialog :is(button,a):focus-visible { outline:3px solid #a8c3ff;outline-offset:3px; }
+@media(max-width:520px){.patient-otp-dialog{padding:32px 22px;}.verify-body .verify-card{padding:30px 24px;}}

@@ -10,6 +10,7 @@ let connection;
 let existingBookings;
 let activeQueues;
 let existingStaff;
+let staffHistory;
 
 function asAdmin(method, path, body) {
   const call = request(app)[method]('/api/admin' + path).set('Cookie', 'mediq_session=admin-test');
@@ -22,6 +23,7 @@ beforeEach(() => {
   existingBookings = [];
   activeQueues = [];
   existingStaff = [{ id: 9 }];
+  staffHistory = [];
   connection = {
     beginTransaction: jest.fn(), rollback: jest.fn(), commit: jest.fn(), release: jest.fn(),
     execute: jest.fn(async sql => {
@@ -30,6 +32,7 @@ beforeEach(() => {
       if (sql.includes('FROM appointments')) return [existingBookings];
       if (sql.includes('FROM queue_entries')) return [activeQueues];
       if (sql.includes('FROM users')) return [existingStaff];
+      if (sql.includes('FROM staff_audit_logs')) return [staffHistory];
       if (sql.includes('FROM clinic_services')) return [[{ id: 2 }]];
       if (sql.includes('FROM clinic_hours')) return [makeDays()];
       if (sql.includes('FROM clinic_closures')) return [[]];
@@ -92,15 +95,25 @@ test('cannot deactivate administrators or patients through the staff endpoint', 
   expect(connection.commit).not.toHaveBeenCalled();
 });
 
-test('permanently deletes a staff account and its dependent access records', async () => {
+test('permanently deletes only an unused staff account and its access records', async () => {
   const result = await asAdmin('delete', '/staff/9');
   expect(result.status).toBe(200);
   expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM user_sessions'))).toBe(true);
   expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM email_verification_tokens'))).toBe(true);
-  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM staff_audit_logs'))).toBe(true);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM staff_audit_logs'))).toBe(false);
   expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM users'))).toBe(true);
   expect(connection.execute.mock.calls.some(([, values]) => values?.includes('staff_deleted'))).toBe(true);
   expect(connection.commit).toHaveBeenCalled();
+});
+
+test('refuses to delete a staff account with activity history without deleting any records', async () => {
+  staffHistory = [{ id: 44 }];
+  const result = await asAdmin('delete', '/staff/9');
+  expect(result.status).toBe(409);
+  expect(result.body.error).toContain('Deactivate');
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('DELETE'))).toBe(false);
+  expect(connection.rollback).toHaveBeenCalled();
+  expect(connection.commit).not.toHaveBeenCalled();
 });
 
 test('authentication rejects a deactivated user with a stale session', async () => {
@@ -122,6 +135,16 @@ test('deactivates an unused service and closes its queue', async () => {
   const [sql, params] = connection.execute.mock.calls.find(([query]) => query.startsWith('UPDATE clinic_services'));
   expect(sql).toContain('is_queue_open = IF(?, is_queue_open, FALSE)');
   expect(params.slice(-3)).toEqual([false, false, 2]);
+});
+
+test('a missed-call ticket prevents service deactivation', async () => {
+  const execute = connection.execute.getMockImplementation();
+  connection.execute.mockImplementation((sql, parameters) => {
+    if (sql.includes('FROM queue_entries')) return Promise.resolve([sql.includes("'not_present'") ? [{ id: 14 }] : []]);
+    return execute(sql, parameters);
+  });
+  expect((await asAdmin('put', '/services/2', service)).status).toBe(409);
+  expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('UPDATE clinic_services'))).toBe(false);
 });
 
 test.each([0, -1, 241, 1.5])('rejects invalid service duration %s', async duration => {

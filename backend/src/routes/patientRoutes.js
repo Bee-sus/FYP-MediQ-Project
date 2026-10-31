@@ -188,7 +188,8 @@ router.post('/queues', ...requireRole('patient'), async (request, response) => {
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [request.user.id]);
+    const [accounts]=await connection.execute('SELECT id,is_active AS isActive,deleted_at AS deletedAt FROM users WHERE id = ? FOR UPDATE', [request.user.id]);
+    if(accounts[0]?.isActive===0||accounts[0]?.isActive===false||accounts[0]?.deletedAt){await connection.rollback();return response.status(403).json({error:'This patient account is unavailable.'});}
 
     const [existing] = await connection.execute(
       `SELECT id FROM queue_entries
@@ -385,6 +386,8 @@ router.post('/appointments', ...requireRole('patient'), async (request, response
     connection = await pool.getConnection();
     await connection.beginTransaction();
     await lockBookings(connection);
+    const [accounts]=await connection.execute('SELECT id,is_active AS isActive,deleted_at AS deletedAt FROM users WHERE id=? FOR UPDATE',[request.user.id]);
+    if(accounts[0]?.isActive===0||accounts[0]?.isActive===false||accounts[0]?.deletedAt){await connection.rollback();return response.status(403).json({error:'This patient account is unavailable.'});}
     if (!(await slotIsOpen(connection, date, time))) {
       await connection.rollback();
       return response.status(409).json({ error: 'The clinic is closed at that time. Select an available slot.' });
@@ -510,7 +513,7 @@ router.patch('/profile', ...requireRole('patient'), async (request, response) =>
   if (!genders.has(gender)) errors.gender = 'Select a gender option.';
   if (Object.keys(errors).length) return response.status(422).json({ error: 'Check the highlighted fields.', fields: errors });
   try {
-    await pool.execute(`UPDATE users SET full_name = ?, phone_number = ?, gender = ?${updateIdentity ? ', identification_type = ?, identification_number = ?' : ''} WHERE id = ? AND role = 'patient'`, [fullName, phone, gender, ...(updateIdentity ? [identity.type, identity.number] : []), request.user.id]);
+    await pool.execute(`UPDATE users SET full_name = ?, phone_number = ?, gender = ?${updateIdentity ? ', identification_type = ?, identification_number = ?' : ''} WHERE id = ? AND role = 'patient' AND is_active=TRUE AND deleted_at IS NULL`, [fullName, phone, gender, ...(updateIdentity ? [identity.type, identity.number] : []), request.user.id]);
     return response.json({ message: 'Profile updated.', profile: { fullName, phone, gender } });
   } catch (error) {
     return response.status(503).json({ error: 'The profile could not be updated.' });

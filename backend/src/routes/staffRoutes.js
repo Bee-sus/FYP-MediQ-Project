@@ -9,6 +9,14 @@ const { validDate } = require('../services/appointmentService');
 const { generateStaffReportPdf } = require('../services/staffReportPdf');
 
 const router = express.Router();
+const { sendQueueCallEmail } = require('../services/emailVerificationService');
+async function emailCalledPatient(patientId, serviceId, queueNumber, serviceName) {
+  try {
+    const [patients] = await pool.execute('SELECT email FROM users WHERE id = ? AND is_active = TRUE', [patientId]);
+    if (!patients[0]?.email) return { sent: false };
+    return await sendQueueCallEmail({ email: patients[0].email, ticket: formatQueueTicket(serviceId, queueNumber), serviceName });
+  } catch (error) { console.error('Queue call email failed:', error.code || 'DELIVERY_FAILED'); return { sent: false }; }
+}
 
 const transitions = {
   waiting: new Set(['called', 'cancelled']),
@@ -24,6 +32,26 @@ const transitionDetails = {
   completed: { title: 'Consultation completed', message: 'Your consultation has been marked as completed. Thank you for visiting.' },
   cancelled: { title: 'Queue cancelled by staff', message: 'Clinic staff cancelled your queue entry.' },
 };
+
+async function lockQueueService(connection, queueId) {
+  // All staff queue transitions take the service lock before individual tickets.
+  // This also serializes normal calls, recalls, and complete-and-call-next.
+  await connection.execute(
+    `SELECT s.id FROM clinic_services s
+     WHERE s.id = (SELECT service_id FROM queue_entries WHERE id = ? AND queue_date = CURRENT_DATE)
+     FOR UPDATE`,
+    [queueId],
+  );
+}
+
+async function serviceIsBusy(connection, serviceId, excludeQueueId) {
+  const [rows] = await connection.execute(
+    `SELECT id FROM queue_entries WHERE service_id = ? AND queue_date = CURRENT_DATE
+     AND status IN ('called','in_progress') AND id <> ? LIMIT 1 FOR UPDATE`,
+    [serviceId, excludeQueueId],
+  );
+  return rows.length > 0;
+}
 
 router.get('/overview', ...requireRole('staff'), async (request, response) => {
   try {
@@ -139,6 +167,7 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    await lockQueueService(connection, queueId);
     const [rows] = await connection.execute(
       `SELECT q.id, q.patient_id AS patientId, q.service_id AS serviceId, q.status,
               q.queue_number AS queueNumber, q.arrived_at AS arrivedAt, s.name AS serviceName
@@ -155,17 +184,18 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
       await connection.rollback();
       return response.status(409).json({ error: `A ${entry.status.replace('_', ' ')} entry cannot move to ${nextStatus.replace('_', ' ')}.` });
     }
-    if (entry.status === 'not_present' && nextStatus === 'called') {
-      if (!entry.arrivedAt) { await connection.rollback(); return response.status(409).json({ error: 'Confirm this patient has arrived before recalling them.' }); }
-      await connection.execute('SELECT id FROM clinic_services WHERE id = ? FOR UPDATE', [entry.serviceId]);
-      const [busy] = await connection.execute("SELECT id FROM queue_entries WHERE service_id = ? AND queue_date = CURRENT_DATE AND status IN ('called','in_progress') AND id <> ? LIMIT 1", [entry.serviceId, queueId]);
-      if (busy.length) { await connection.rollback(); return response.status(409).json({ error: 'Finish the current patient before recalling this patient.' }); }
+    if (nextStatus === 'called') {
+      if (entry.status === 'not_present' && !entry.arrivedAt) { await connection.rollback(); return response.status(409).json({ error: 'Confirm this patient has arrived before recalling them.' }); }
+      if (await serviceIsBusy(connection, entry.serviceId, queueId)) {
+        await connection.rollback();
+        return response.status(409).json({ error: 'Finish the current patient before calling or recalling another patient.' });
+      }
     }
     if (entry.status === 'waiting' && nextStatus === 'called') {
       const [earlierEntries] = await connection.execute(
         `SELECT id FROM queue_entries
          WHERE service_id = ? AND queue_date = CURRENT_DATE AND status = 'waiting' AND queue_number < ?
-         LIMIT 1`,
+         LIMIT 1 FOR UPDATE`,
         [entry.serviceId, entry.queueNumber],
       );
       if (earlierEntries.length) {
@@ -198,7 +228,8 @@ router.patch('/queues/:queueId/status', ...requireRole('staff'), async (request,
       [request.user.id, `queue_${nextStatus}`, queueId, `${formatQueueTicket(entry.serviceId, entry.queueNumber)} · ${entry.serviceName}`],
     );
     await connection.commit();
-    return response.json({ message: `Queue ${formatQueueTicket(entry.serviceId, entry.queueNumber)} updated to ${nextStatus.replace('_', ' ')}.` });
+    const email = nextStatus === 'called' ? await emailCalledPatient(entry.patientId, entry.serviceId, entry.queueNumber, entry.serviceName) : null;
+    return response.json({ message: `Queue ${formatQueueTicket(entry.serviceId, entry.queueNumber)} updated to ${nextStatus.replace('_', ' ')}.${email ? email.sent ? ' Call email sent.' : ' Call email was not sent; the in-system notification is available.' : ''}`, emailSent: email?.sent });
   } catch (error) {
     if (connection) await connection.rollback();
     return response.status(503).json({ error: 'The queue status could not be updated.' });
@@ -215,6 +246,7 @@ router.post('/queues/:queueId/complete-and-call-next', ...requireRole('staff'), 
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    await lockQueueService(connection, queueId);
     const [rows] = await connection.execute(
       `SELECT q.id, q.patient_id AS patientId, q.service_id AS serviceId, q.status,
               q.queue_number AS queueNumber, s.name AS serviceName
@@ -230,6 +262,11 @@ router.post('/queues/:queueId/complete-and-call-next', ...requireRole('staff'), 
     if (entry.status !== 'in_progress') {
       await connection.rollback();
       return response.status(409).json({ error: 'Only a consultation in progress can be completed.' });
+    }
+
+    if (await serviceIsBusy(connection, entry.serviceId, queueId)) {
+      await connection.rollback();
+      return response.status(409).json({ error: 'Resolve the other active patient in this service before calling the next patient.' });
     }
 
     const [waitingRows] = await connection.execute(
@@ -267,6 +304,7 @@ router.post('/queues/:queueId/complete-and-call-next', ...requireRole('staff'), 
     await connection.commit();
     const completedNumber = formatQueueTicket(entry.serviceId, entry.queueNumber);
     const nextNumber = next ? formatQueueTicket(entry.serviceId, next.queueNumber) : null;
+    if (next) await emailCalledPatient(next.patientId, entry.serviceId, next.queueNumber, entry.serviceName);
     return response.json({
       message: next ? `${completedNumber} completed and ${nextNumber} called.` : `${completedNumber} completed. No patient is waiting in this service.`,
       calledQueueId: next?.id || null,
@@ -319,7 +357,7 @@ router.patch('/password', ...requireRole('staff'), async (request, response) => 
 const { buildQualityReport, automaticReportOptions } = require('../services/reportQuality');
 async function loadStaffReport(from, to, options) {
   const [rows] = await pool.execute(`SELECT q.id, q.service_id AS serviceId, s.name AS serviceName, q.queue_number AS queueNumber, q.status,
-    q.is_test_visit AS isTestVisit, q.joined_at AS joinedAt, q.consultation_started_at AS consultationStartedAt, q.completed_at AS completedAt,
+    q.is_test_visit AS isTestVisit, DATE_FORMAT(q.queue_date, '%Y-%m') AS visitMonth, q.joined_at AS joinedAt, q.consultation_started_at AS consultationStartedAt, q.completed_at AS completedAt,
     CASE WHEN q.consultation_started_at IS NOT NULL THEN TIMESTAMPDIFF(SECOND,q.joined_at,q.consultation_started_at)/60.0 END AS waitMinutes,
     CASE WHEN q.status = 'completed' AND q.completed_at IS NOT NULL AND q.consultation_started_at IS NOT NULL THEN TIMESTAMPDIFF(SECOND,q.consultation_started_at,q.completed_at)/60.0 END AS consultationMinutes,
     CASE WHEN q.status IN ('waiting','called','not_present') THEN TIMESTAMPDIFF(SECOND,q.joined_at,CURRENT_TIMESTAMP)/60.0 END AS elapsedWaitMinutes,
@@ -335,6 +373,11 @@ function reportDates(request) {
   const from = String(request.query.from || '');
   const to = String(request.query.to || '');
   const options = automaticReportOptions();
+  if (request.query.serviceId) {
+    const id = Number(request.query.serviceId);
+    if (!Number.isSafeInteger(id) || id < 1) return null;
+    options.serviceId = id;
+  }
   return validDate(from) && validDate(to) && from <= to && options ? { from, to, options } : null;
 }
 
@@ -350,7 +393,8 @@ router.get('/reports/pdf', ...requireRole('staff'), async (request, response) =>
   const dates = reportDates(request);
   if (!dates) return response.status(422).json({ error: 'Choose a valid report start and end date.' });
   try {
-    const report = await loadStaffReport(dates.from, dates.to, dates.options);
+    const report = await loadStaffReport(dates.from, dates.to, {...dates.options, includeAllVisits: request.query.includeVisitDetails === 'true'});
+    report.includeVisitDetails = request.query.includeVisitDetails === 'true';
     const pdf = await generateStaffReportPdf(report);
     response.set({
       'Content-Type': 'application/pdf',
@@ -360,6 +404,22 @@ router.get('/reports/pdf', ...requireRole('staff'), async (request, response) =>
     });
     return response.send(pdf);
   } catch (error) { return response.status(503).json({ error: 'The PDF report could not be generated.' }); }
+});
+
+const {reviewOptions,filterVisits,visitCsv} = require('../services/reportVisits');
+router.get('/reports/visits', ...requireRole('staff'), async (request,response) => {
+  const dates=reportDates(request), options=reviewOptions(request.query);
+  if(!dates || !options) return response.status(422).json({error:'Choose valid dates and visit filters.'});
+  try {
+    const report=await loadStaffReport(dates.from,dates.to,{...dates.options,includeAllVisits:true});
+    const matches=filterVisits(report.visits,options);
+    if(request.query.format === 'csv') {
+      response.set({'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="mediq-visits-${dates.from}-to-${dates.to}.csv"`,'Cache-Control':'no-store'});
+      return response.send(visitCsv(matches));
+    }
+    const pages=Math.max(1,Math.ceil(matches.length/options.pageSize)), page=Math.min(options.page,pages);
+    return response.json({visits:matches.slice((page-1)*options.pageSize,page*options.pageSize),page,pages,pageSize:options.pageSize,total:matches.length,periodTotal:report.detailTotal});
+  } catch(error){return response.status(503).json({error:'Visit records could not be loaded. Please retry.'});}
 });
 
 module.exports = router;

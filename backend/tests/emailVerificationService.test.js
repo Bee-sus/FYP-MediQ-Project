@@ -1,8 +1,29 @@
 const nodemailer = require('nodemailer');
-const { sendVerificationEmail, sendStaffWelcomeEmail } = require('../src/services/emailVerificationService');
+const { sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail,sendPatientOtpEmail } = require('../src/services/emailVerificationService');
+
+test('queue call email uses SMTP acceptance and includes the correct ticket and service', async () => {
+  Object.assign(process.env, {NODE_ENV:'test',EMAIL_DELIVERY_MODE:'smtp',SMTP_HOST:'smtp.example.test',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'unused'});
+  const sendMail=jest.fn().mockResolvedValue({accepted:['patient@example.test']});
+  jest.spyOn(nodemailer,'createTransport').mockReturnValue({sendMail});
+  expect(await sendQueueCallEmail({email:'patient@example.test',ticket:'Q1-003',serviceName:'General'})).toEqual({sent:true});
+  expect(sendMail.mock.calls[0][0]).toMatchObject({to:'patient@example.test',subject:expect.stringContaining('Q1-003'),text:expect.stringContaining('General')});
+});
 
 const keys = ['NODE_ENV', 'EMAIL_DELIVERY_MODE', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'APP_BASE_URL'];
 const original = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+
+test('Patient OTP preview codes are only exposed in explicit development preview mode',async()=>{
+ Object.assign(process.env,{NODE_ENV:'development',EMAIL_DELIVERY_MODE:'preview'});
+ const transport=jest.spyOn(nodemailer,'createTransport');
+ expect(await sendPatientOtpEmail({email:'patient@example.test',code:'123456'})).toEqual({sent:false,previewCode:'123456'});
+ expect(transport).not.toHaveBeenCalled();
+});
+test('production sends OTP mail and never returns a preview code',async()=>{
+ Object.assign(process.env,{NODE_ENV:'production',EMAIL_DELIVERY_MODE:'preview',SMTP_HOST:'smtp.example.test',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'unused'});
+ const sendMail=jest.fn().mockResolvedValue({accepted:['patient@example.test']});jest.spyOn(nodemailer,'createTransport').mockReturnValue({sendMail});
+ expect(await sendPatientOtpEmail({email:'patient@example.test',code:'123456'})).toEqual({sent:true});
+ expect(sendMail.mock.calls[0][0].text).toContain('123456');
+});
 
 afterEach(() => {
   for (const key of keys) {

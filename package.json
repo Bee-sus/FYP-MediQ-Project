@@ -16,7 +16,9 @@
     "db:migrate:missed-calls": "node database/missedCallMigration.js",
     "db:migrate:arrival": "node database/arrivalMigration.js",
     "db:migrate:appointments": "node database/appointmentMigration.js",
-    "db:migrate:admin": "node database/adminMigration.js"
+    "db:migrate:admin": "node database/adminMigration.js",
+    "db:migrate:integrity": "node database/integrityMigration.js",
+    "test:db:integrity": "node backend/tests/integrityDatabaseCheck.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

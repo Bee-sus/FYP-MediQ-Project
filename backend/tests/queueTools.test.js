@@ -62,15 +62,26 @@ function alertHarness(browserEnabled, permission = 'granted', role = 'patient') 
   const storage = new Map();
   const Notification = jest.fn(); Notification.permission = permission;
   Notification.requestPermission = jest.fn(async () => 'granted');
+  const popupNodes = {h2:{},p:{}};
+  const popup = {style:{},querySelector: selector=>popupNodes[selector],showModal:jest.fn()};
   const context = vm.createContext({
     window: { Notification }, Notification,
-    document: { addEventListener: jest.fn() },
+    document: { addEventListener: jest.fn(), querySelector: () => popup },
     localStorage: { getItem: () => browserEnabled === undefined ? null : JSON.stringify({ browser: browserEnabled, sound: false }), setItem: jest.fn() },
     sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../frontend/queue-alerts.js'), 'utf8'), context);
-  return { alerts: context.window.createQueueAlerts(role, { querySelector: key => nodes[key] }), Notification, nodes };
+  return { alerts: context.window.createQueueAlerts(role, { querySelector: key => nodes[key] }), Notification, nodes, popup, popupNodes };
 }
+
+test('patient call displays an on-page popup once per event', () => {
+  const {alerts,popup,popupNodes}=alertHarness(false);
+  alerts.notify('called-1','Your turn','Please proceed');
+  alerts.notify('called-1','Your turn','Please proceed');
+  expect(popup.showModal).toHaveBeenCalledTimes(1);
+  expect(popupNodes.h2.textContent).toBe('Your turn');
+  expect(popupNodes.p.textContent).toBe('Please proceed');
+});
 test('browser alerts are opt-in and never request permission automatically', () => {
   const { alerts, Notification } = alertHarness(false);
   alerts.notify('called-1', 'Called', 'Proceed');

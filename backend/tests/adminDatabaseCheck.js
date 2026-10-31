@@ -1,5 +1,6 @@
 // Runs in a newly created disposable database. The configured application database is untouched.
 require('dotenv').config();
+process.env.EMAIL_DELIVERY_MODE='preview';
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -52,8 +53,10 @@ const request = require('supertest');
     assert((await request(app).get('/api/services')).body.services.some(item => item.id === serviceId));
     const registration = await request(app).post('/api/auth/register').send({ fullName: 'Test Patient', email: 'patient@example.invalid', phone: '+60 12-345 6789', birthDate: '2000-01-01', gender: 'other', password: 'Test-Patient-2026!', confirmPassword: 'Test-Patient-2026!', terms: true });
     assert.equal(registration.status, 201);
-    const patientVerificationToken = new URL(registration.body.verificationPreviewUrl).searchParams.get('token');
-    assert.equal((await request(app).post('/api/auth/verify-email').send({ token: patientVerificationToken })).status, 200);
+    const verificationSession=registration.body.verificationSession;
+    const codeMail=await request(app).post('/api/auth/request-email-code').send({verificationSession});
+    assert.equal(codeMail.status,200);
+    assert.equal((await request(app).post('/api/auth/verify-email-code').send({verificationSession,code:codeMail.body.previewCode})).status,200);
     const patientLogin = await request(app).post('/api/auth/login').send({ email: 'patient@example.invalid', password: 'Test-Patient-2026!', role: 'patient' });
     assert.equal(patientLogin.status, 200);
     const patientCookie = patientLogin.headers['set-cookie'][0].split(';')[0];
@@ -82,6 +85,17 @@ const request = require('supertest');
     assert(audits.body.items.some(item => item.action === 'clinic_hours_updated'));
     assert(audits.body.items.some(item => item.action === 'staff_deactivated'));
     assert.equal((await api('get', '/overview')).status, 200);
+    const patientId=registration.body.userId;
+    assert.equal((await api('delete',`/patients/${patientId}`)).status,409,'Cannot delete with a pending appointment');
+    assert.equal((await api('patch',`/patients/${patientId}`,{isActive:false})).status,200);
+    assert.equal((await request(app).get('/api/patient/overview').set('Cookie',patientCookie)).status,401,'Deactivation revokes existing sessions');
+    assert.equal((await api('patch',`/patients/${patientId}`,{isActive:true})).status,200);
+    await pool.execute("UPDATE appointments SET status='cancelled',cancelled_at=NOW() WHERE patient_id=?",[patientId]);
+    assert.equal((await api('delete',`/patients/${patientId}`)).status,200);
+    const [deleted]=await pool.execute('SELECT full_name,email,is_active,deleted_at FROM users WHERE id=?',[patientId]);
+    assert.equal(deleted[0].full_name,'Deleted patient');assert.equal(deleted[0].is_active,0);assert(deleted[0].deleted_at);assert.notEqual(deleted[0].email,'patient@example.invalid');
+    const [history]=await pool.execute('SELECT id FROM appointments WHERE patient_id=?',[patientId]);assert.equal(history.length,1,'History must be preserved');
+    assert.equal((await api('patch',`/patients/${patientId}`,{isActive:true})).status,404,'Deletion cannot be undone');
     console.log('Administrator MySQL workflow passed: accounts, role restrictions, session revocation, services, public listing, weekly hours, availability, booking protection and audit history.');
   } finally {
     if (pool) await pool.end();

@@ -1,309 +1,153 @@
 const { PDFDocument } = require('pdfkit');
 
-const PAGE_WIDTH = 595.28;
-const LEFT = 48;
-const RIGHT = PAGE_WIDTH - LEFT;
-const WIDTH = RIGHT - LEFT;
-const CONTENT_BOTTOM = 747;
-const INK = '#1d2d42';
-const MUTED = '#5f6d7c';
-const ACCENT = '#0b776c';
-const RULE = '#cdd6dd';
+// Charts are drawn as vectors so exported reports remain sharp when printed.
+const C={ink:'#182c3b',muted:'#647681',teal:'#087f73',blue:'#457db5',amber:'#cc932f',red:'#c8685f',line:'#dde6e9',pale:'#f1f7f6',white:'#ffffff'};
+const L=44,W=507,BOTTOM=744;
+const n=value=>Math.max(0,Number(value)||0);
+const pct=(value,total)=>total?Math.round(n(value)/total*100):0;
+const mins=value=>value==null?'Not measured':`${Number(Number(value).toFixed(1))} min`;
+const date=value=>new Intl.DateTimeFormat('en-MY',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(value+'T00:00:00Z'));
 
-const count = value => Math.max(0, Number(value) || 0);
-const minutes = value => value == null ? 'Not available' : `${Number(Number(value).toFixed(1))} min`;
+function generateStaffReportPdf(report,generatedAt=new Date()) {
+ return new Promise((resolve,reject)=>{
+  const doc=new PDFDocument({size:'A4',margin:44,bufferPages:true});const chunks=[];
+  doc.on('data',chunk=>chunks.push(chunk));doc.on('error',reject);doc.on('end',()=>resolve(Buffer.concat(chunks)));
+  const s=report.summary||{},total=n(s.totalPatients),completed=n(s.completed),cancelled=n(s.cancelled),other=Math.max(0,total-completed-cancelled);
+  const q=report.quality||{totalVisits:total,includedVisits:total,excludedUnusual:0};
+  const services=report.services||[],prediction=report.predictionPerformance||{};
+  const scope=report.serviceId?(report.availableServices||[]).find(v=>String(v.serviceId)===String(report.serviceId))?.serviceName||'Selected service':'All clinic services';
+  const txt=(value,x,y,width=W,size=10,color=C.ink,bold=false)=>{
+   doc.font(bold?'Helvetica-Bold':'Helvetica').fontSize(size).fillColor(color);
+   const options={width,align:'left',lineGap:2,paragraphGap:0,continued:false,characterSpacing:0};
+   const height=doc.heightOfString(String(value),options);doc.text(String(value),x,y,options);return height;
+  };
+  const rule=y=>doc.moveTo(L,y).lineTo(L+W,y).strokeColor(C.line).lineWidth(.7).stroke();
+  let first=true;
+  const page=(chapter,title,subtitle)=>{
+   if(!first)doc.addPage();first=false;
+   doc.rect(0,0,595.28,7).fill(C.teal);
+   txt('MediQ',L,29,180,18,C.teal,true);txt(report.preview?'SAMPLE REPORT':'STAFF OPERATIONS',L+320,34,187,8,C.muted,true);
+   rule(63);txt(chapter.toUpperCase(),L,84,W,8,C.teal,true);
+   txt(title,L,104,W,25,C.ink,true);
+   txt(subtitle,L,142,W,9,C.muted);
+  };
+  const heading=(title,y,note)=>{txt(title,L,y,W,14,C.ink,true);if(note)txt(note,L,y+23,W,9,C.muted);};
+  const card=(label,value,note,x,y,width=161)=>{
+   doc.roundedRect(x,y,width,87,10).fill(C.pale);
+   txt(label,x+13,y+12,width-26,8,C.muted,true);
+   txt(value,x+13,y+30,width-26,String(value).length>10?17:22,C.ink,true);
+   txt(note,x+13,y+61,width-26,7.5,C.muted);
+  };
+  const noteBox=(title,body,y)=>{
+   const height=txtHeight(body,W-34,9)+49;
+   doc.roundedRect(L,y,W,height,9).fill(C.pale);txt(title,L+17,y+13,W-34,10,C.teal,true);txt(body,L+17,y+34,W-34,9,C.ink);return y+height;
+  };
+  const txtHeight=(value,width,size)=>{doc.font('Helvetica').fontSize(size);return doc.heightOfString(String(value),{width,lineGap:2});};
+  const legend=(items,x,y,width=W)=>{const step=width/items.length;items.forEach((item,i)=>{doc.circle(x+i*step+4,y+5,3).fill(item.color);txt(item.label,x+i*step+13,y,width/items.length-15,8,C.muted);});};
+  const stacked=(items,x,y,width,height)=>{
+   const sum=items.reduce((a,v)=>a+n(v.value),0);doc.roundedRect(x,y,width,height,4).fill(C.line);
+   let offset=0;for(const item of items){if(sum&&n(item.value)){const size=width*n(item.value)/sum;doc.rect(x+offset,y,size,height).fill(item.color);offset+=size;}}
+  };
+  const donut=(items,x,y,r)=>{
+   const sum=items.reduce((a,v)=>a+n(v.value),0);doc.circle(x,y,r).fill(C.line);
+   let angle=-Math.PI/2;
+   for(const item of items){if(!sum||!n(item.value))continue;const end=angle+Math.PI*2*n(item.value)/sum;doc.moveTo(x,y);for(let a=angle;a<end;a+=.035)doc.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);doc.lineTo(x+Math.cos(end)*r,y+Math.sin(end)*r).closePath().fill(item.color);angle=end;}
+   doc.circle(x,y,r*.68).fill(C.white);
+   doc.font('Helvetica-Bold').fontSize(26).fillColor(C.ink).text(String(sum),x-r*.6,y-17,{width:r*1.2,align:'center'});
+   doc.font('Helvetica').fontSize(8).fillColor(C.muted).text('included visits',x-r*.6,y+16,{width:r*1.2,align:'center'});
+  };
+  try{
+   doc.info.Title='MediQ visual queue performance report';doc.info.Author='MediQ';doc.info.CreationDate=generatedAt;
+   page('01 / At a glance','Queue performance summary',`${date(report.from)} - ${date(report.to)} | ${scope}`);
+   const stamp=new Intl.DateTimeFormat('en-MY',{timeZone:'Asia/Kuala_Lumpur',dateStyle:'medium',timeStyle:'short'}).format(generatedAt);
+   txt(`Prepared ${stamp} (Malaysia time)`,L,166,W,8,C.muted);
+   card('INCLUDED VISITS',total,'Queue visits, not unique people',L,195);
+   card('COMPLETION RATE',total?`${pct(completed,total)}%`:'No visits',`${completed} completed visits`,L+173,195);
+   card('AVERAGE WAIT',mins(s.averageWaitMinutes),`${n(s.measuredWaitVisits)} measured waits`,L+346,195);
+   card('COMPLETED',completed,'Consultations completed',L,294);
+   card('CANCELLED',cancelled,total?`${pct(cancelled,total)}% of included visits`:'No included visits',L+173,294);
+   card('CONSULTATION TIME',mins(s.averageConsultationMinutes),'Average completed consultation',L+346,294);
+   heading('How visits ended',410,'Statuses reflect the time the report was generated.');
+   const outcomes=[{label:'Completed',value:completed,color:C.teal},{label:'Cancelled',value:cancelled,color:C.red},{label:'Active / other',value:other,color:C.amber}];
+   donut(outcomes,L+96,554,83);
+   outcomes.forEach((item,i)=>{const y=485+i*47;doc.circle(L+221,y+7,4).fill(item.color);txt(item.label,L+236,y,162,10,C.ink,true);txt(`${item.value} visits | ${pct(item.value,total)}%`,L+236,y+17,230,9,C.muted);});
+   const busiest=services.reduce((best,v)=>!best||n(v.patientCount)>n(best.patientCount)?v:best,null);
+   noteBox('What stands out',total?`${completed} of ${total} included visits were completed. ${busiest?`The busiest service handled ${pct(busiest.patientCount,total)}% of included visits. `:''}${total<10?'This is a small sample; interpret percentages with care.':'See the following pages for waiting times and service comparisons.'}`:'No visits passed the report filters. Check the chosen dates, service and data coverage on the next page.',650);
 
-function displayDate(value) {
-  return new Intl.DateTimeFormat('en-MY', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
-    .format(new Date(`${value}T00:00:00Z`));
-}
+   page('02 / Waiting and coverage','Waiting times, explained','Only measured, included waits enter the waiting-time charts. Open visits are not final waits.');
+   heading('How long did measured visits wait?',190,'Each bar counts visits in one waiting-time range.');
+   const buckets=report.waitDistribution||[],maximum=Math.max(1,...buckets.map(v=>n(v.count)));
+   buckets.forEach((v,i)=>{const y=246+i*46;txt(v.label,L,y,185,9,C.ink);doc.roundedRect(L+188,y+1,261,16,4).fill(C.line);if(n(v.count))doc.roundedRect(L+188,y+1,Math.max(2,261*n(v.count)/maximum),16,4).fill(C.teal);txt(`${n(v.count)}`,L+465,y,42,10,C.ink,true);});
+   card('MEDIAN WAIT',mins(s.medianWaitMinutes),'Middle measured waiting time',L,448);
+   card('LONGEST WAIT',mins(s.longestWaitMinutes),'Longest included measured wait',L+173,448);
+   const measured=buckets.reduce((sum,v)=>sum+n(v.count),0),under30=buckets.slice(0,2).reduce((sum,v)=>sum+n(v.count),0);
+   card('WAITED UNDER 30 MIN',measured?`${pct(under30,measured)}%`:'Not measured',`${under30} of ${measured} measured waits`,L+346,448);
+   heading('How much data is included?',563,`${n(q.includedVisits)} of ${n(q.totalVisits)} selected visits contribute to the summary.`);
+   const excluded=Math.max(0,n(q.totalVisits)-n(q.includedVisits));
+   stacked([{value:n(q.includedVisits),color:C.teal},{value:excluded,color:C.amber}],L,611,W,18);
+   legend([{label:`Included: ${n(q.includedVisits)}`,color:C.teal},{label:`Excluded: ${excluded}`,color:C.amber}],L,642);
+   txt(`Excluded visits remain available in Visit review. Automatic checks flag missing or invalid timing data and unusually long durations. Review limits: wait ${q.waitReviewMinutes??120} min; consultation ${q.consultationReviewMinutes??60} min. Original durations are never capped.`,L,676,W,9,C.muted);
 
-function generatedDate(value) {
-  return new Intl.DateTimeFormat('en-MY', {
-    timeZone: 'Asia/Kuala_Lumpur', dateStyle: 'medium', timeStyle: 'short',
-  }).format(value);
-}
-
-function line(doc, x1, y, x2, color = RULE, width = 0.7) {
-  doc.moveTo(x1, y).lineTo(x2, y).strokeColor(color).lineWidth(width).stroke();
-}
-
-function section(doc, number, title, y) {
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(ACCENT)
-    .text(`${number}  /  ${title.toUpperCase()}`, LEFT, y, { characterSpacing: 0.8 });
-  line(doc, LEFT, y + 18, RIGHT);
-  return y + 30;
-}
-
-function firstPageHeader(doc, report, generatedAt) {
-  doc.font('Helvetica-Bold').fontSize(15).fillColor(INK).text('MediQ', LEFT, 39);
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED)
-    .text('CLINIC OPERATIONS  /  STAFF REPORT', 295, 46, { width: 252, align: 'right', characterSpacing: 0.8 });
-  line(doc, LEFT, 76, RIGHT, ACCENT, 1.5);
-
-  doc.font('Times-Bold').fontSize(25).fillColor(INK).text('Queue activity report', LEFT, 98);
-  doc.font('Helvetica').fontSize(11).fillColor(MUTED)
-    .text(`${displayDate(report.from)} to ${displayDate(report.to)}`, LEFT, 135);
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('PREPARED', LEFT, 164);
-  doc.font('Helvetica').fontSize(9).fillColor(INK)
-    .text(`${generatedDate(generatedAt)}  |  Malaysia time`, LEFT + 67, 163);
-  if (report.preview) doc.font('Helvetica-Bold').fontSize(8).fillColor(ACCENT)
-    .text('SAMPLE DATA', 434, 164, { width: 113, align: 'right' });
-  if(report.quality) doc.font('Helvetica').fontSize(7).fillColor(MUTED).text('Automatic filtering'+' | Included: '+report.quality.includedVisits+' / '+report.quality.totalVisits+' | Excluded: '+(report.quality.excludedByScope+report.quality.excludedUnusual),LEFT,176,{width:WIDTH});
-  line(doc, LEFT, 186, RIGHT);
-}
-
-function continuationHeader(doc, report) {
-  doc.font('Helvetica-Bold').fontSize(13).fillColor(INK).text('MediQ', LEFT, 40);
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED)
-    .text(`Queue activity report  |  ${displayDate(report.from)} to ${displayDate(report.to)}`,
-      176, 43, { width: 371, align: 'right' });
-  line(doc, LEFT, 75, RIGHT, ACCENT, 1.3);
-}
-
-function executiveSummary(doc, report) {
-  const total = count(report.summary.totalPatients);
-  const completed = count(report.summary.completed);
-  const cancelled = count(report.summary.cancelled);
-  const other = Math.max(0, total - completed - cancelled);
-  const rate = total ? Math.round(completed / total * 100) : 0;
-  const busiest = report.services.find(service => count(service.patientCount) > 0);
-  const period = `${displayDate(report.from)} and ${displayDate(report.to)}`;
-  const narrative = total
-    ? `Between ${period}, the clinic recorded ${total} queue entr${total === 1 ? 'y' : 'ies'}. ${completed} ${completed === 1 ? 'was' : 'were'} completed (${rate}%), ${cancelled} ${cancelled === 1 ? 'was' : 'were'} cancelled, and ${other} ${other === 1 ? 'was' : 'were'} in other statuses at export.${busiest ? ` ${busiest.serviceName} had the most activity with ${count(busiest.patientCount)} entries.` : ''}`
-    : `No queue entries were recorded between ${period}. The measures and service counts below reflect that empty reporting period.`;
-  const start = section(doc, '01', 'Executive summary', 208);
-  doc.font('Times-Roman').fontSize(11).fillColor(INK);
-  const height = doc.heightOfString(narrative, { width: WIDTH, lineGap: 3 });
-  doc.text(narrative, LEFT, start, { width: WIDTH, lineGap: 3 });
-  if (total > 0 && total < 10) {
-    doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(MUTED)
-      .text('The small number of entries means percentages may change substantially with further activity.',
-        LEFT, start + height + 8, { width: WIDTH });
-    return start + height + 28;
-  }
-  return start + height + 15;
-}
-
-function results(doc, report, y) {
-  const total = count(report.summary.totalPatients);
-  const completed = count(report.summary.completed);
-  const cancelled = count(report.summary.cancelled);
-  const other = Math.max(0, total - completed - cancelled);
-  const rate = value => `${total ? Math.round(value / total * 100) : 0}%`;
-  const top = section(doc, '02', 'Recorded measures', y);
-  const gap = 25;
-  const width = (WIDTH - gap) / 2;
-  const rightX = LEFT + width + gap;
-  const headerY = top + 2;
-
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED)
-    .text('KEY MEASURE', LEFT, headerY)
-    .text('RESULT', LEFT + width - 95, headerY, { width: 95, align: 'right' })
-    .text('QUEUE STATUS', rightX, headerY)
-    .text('COUNT', rightX + 139, headerY, { width: 46, align: 'right' })
-    .text('SHARE', rightX + 190, headerY, { width: 44, align: 'right' });
-  line(doc, LEFT, headerY + 17, LEFT + width);
-  line(doc, rightX, headerY + 17, RIGHT);
-
-  const measures = [
-    ['Queue entries', total],
-    ['Completed visits', completed],
-    ['Average wait', minutes(report.summary.averageWaitMinutes)],
-    ['Average consultation', minutes(report.summary.averageConsultationMinutes)],
-    ['Median wait', minutes(report.summary.medianWaitMinutes)],
-    ['Longest wait', minutes(report.summary.longestWaitMinutes)],
-  ];
-  const statuses = [
-    ['Completed', completed],
-    ['Cancelled', cancelled],
-    ['Other statuses', other],
-  ];
-  const firstRowY = headerY + 23;
-  measures.forEach(([label, value], index) => {
-    const rowY = firstRowY + index * 24;
-    doc.font('Helvetica').fontSize(9).fillColor(INK).text(label, LEFT, rowY, { width: width - 94 });
-    doc.font('Helvetica-Bold').text(String(value), LEFT + width - 95, rowY, { width: 95, align: 'right' });
-    line(doc, LEFT, rowY + 17, LEFT + width);
-  });
-  statuses.forEach(([label, value], index) => {
-    const rowY = firstRowY + index * 24;
-    doc.font('Helvetica').fontSize(9).fillColor(INK).text(label, rightX, rowY, { width: 137 });
-    doc.font('Helvetica-Bold').text(String(value), rightX + 139, rowY, { width: 46, align: 'right' });
-    doc.font('Helvetica').text(rate(value), rightX + 190, rowY, { width: 44, align: 'right' });
-    line(doc, rightX, rowY + 17, RIGHT);
-  });
-  return firstRowY + measures.length * 24 + 7;
-}
-
-function serviceHeader(doc, y) {
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED)
-    .text('SERVICE', LEFT + 3, y)
-    .text('ENTRIES', LEFT + 295, y, { width: 57, align: 'right' })
-    .text('COMPLETED', LEFT + 363, y, { width: 74, align: 'right' })
-    .text('RATE', LEFT + 450, y, { width: 46, align: 'right' });
-  line(doc, LEFT, y + 17, RIGHT, ACCENT, 1);
-  return y + 24;
-}
-
-function serviceTable(doc, report, y) {
-  y = section(doc, '03', 'Service activity', y);
-  y = serviceHeader(doc, y + 2);
-  if (!report.services.length) {
-    doc.font('Helvetica').fontSize(9).fillColor(MUTED)
-      .text('No clinic services are available for this report.', LEFT + 3, y + 8);
-    return y + 38;
-  }
-  report.services.forEach((service, index) => {
-    const name = String(service.serviceName || 'Unnamed service');
-    const nameHeight = doc.font('Helvetica').fontSize(9).heightOfString(name, { width: 285 });
-    const rowHeight = Math.max(27, Math.ceil(nameHeight) + 12);
-    if (y + rowHeight > CONTENT_BOTTOM) {
-      doc.addPage();
-      continuationHeader(doc, report);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(ACCENT)
-        .text('03  /  SERVICE ACTIVITY (CONTINUED)', LEFT, 102, { characterSpacing: 0.8 });
-      y = serviceHeader(doc, 134);
+   const serviceGroups=[];for(let i=0;i<services.length;i+=4)serviceGroups.push(services.slice(i,i+4));if(!serviceGroups.length)serviceGroups.push([]);
+   serviceGroups.forEach((group,index)=>{
+    page('03 / Service comparison',index?'Service performance (continued)':'Which services handled the visits?','Compare workload, outcomes and measured waiting times within the selected period.');
+    legend(outcomes,L,188);
+    let y=229;
+    if(!group.length)noteBox('No service activity','There are no included service visits in this reporting period.',y);
+    for(const v of group){
+     const height=txt(v.serviceName,L,y,W,12,C.ink,true);y+=height+8;
+     const entries=n(v.patientCount),done=n(v.completed),cancel=n(v.cancelled),active=Math.max(0,entries-done-cancel);
+     stacked([{value:done,color:C.teal},{value:cancel,color:C.red},{value:active,color:C.amber}],L,y,W,14);y+=23;
+     txt(`${entries} visits | ${done} completed (${pct(done,entries)}%) | ${cancel} cancelled | ${active} other`,L,y,W,9);y+=19;
+     txt(`Average measured wait: ${mins(v.averageWaitMinutes)} | ${n(v.measuredWaitVisits)} measured visits`,L,y,W,8,C.muted);y+=31;
     }
-    doc.font('Helvetica').fontSize(9).fillColor(INK)
-      .text(name, LEFT + 3, y + 5, { width: 285 });
-    const entries = count(service.patientCount);
-    const completed = count(service.completed);
-    doc.text(String(entries), LEFT + 295, y + 5, { width: 57, align: 'right' });
-    doc.text(String(completed), LEFT + 363, y + 5, { width: 74, align: 'right' });
-    doc.text(`${entries ? Math.round(completed / entries * 100) : 0}%`,
-      LEFT + 450, y + 5, { width: 46, align: 'right' });
-    line(doc, LEFT, y + rowHeight, RIGHT);
-    y += rowHeight;
-  });
-  return y;
-}
+    txt('Each service bar represents 100% of that service\'s included visits. Compare the labelled visit counts to assess workload; compare the coloured shares to assess outcomes.',L,688,W,9,C.muted);
+   });
 
-function predictionAccuracy(doc, report, y) {
-  const prediction = report.predictionPerformance || {};
-  if (y + 250 > CONTENT_BOTTOM) {
-    doc.addPage();
-    continuationHeader(doc, report);
-    y = 103;
-  } else y += 22;
-  y = section(doc, '04', 'Local prediction check', y);
-  const measured = count(prediction.modelVisits);
-  const within = count(prediction.withinFiveMinutes);
-  const items = [
-    ['ML visits measured', measured],
-    ['Average absolute error', measured ? minutes(prediction.meanAbsoluteErrorMinutes) : 'Not available'],
-    ['Within 5 minutes', measured ? `${within} of ${measured}` : 'Not available'],
-    ['Measured fallback estimates excluded', count(prediction.fallbackVisits)],
-  ];
-  items.forEach(([label, value]) => {
-    doc.font('Helvetica').fontSize(9).fillColor(INK).text(label, LEFT + 3, y, { width: 335 });
-    doc.font('Helvetica-Bold').text(String(value), LEFT + 337, y, { width: 156, align: 'right' });
-    line(doc, LEFT, y + 17, RIGHT);
-    y += 23;
-  });
-  y += 11;
-  const services = prediction.services || [];
-  if (services.length) {
-    const heading = () => {
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED)
-        .text('SERVICE', LEFT + 3, y, { width: 255 })
-        .text('VISITS', LEFT + 264, y, { width: 58, align: 'right' })
-        .text('AVG ERROR', LEFT + 325, y, { width: 85, align: 'right' })
-        .text('WITHIN 5 MIN', LEFT + 413, y, { width: 80, align: 'right' });
-      line(doc, LEFT, y + 17, RIGHT, ACCENT, 1);
-      y += 24;
-    };
-    heading();
-    services.forEach(service => {
-      const name = String(service.serviceName || 'Unnamed service');
-      const nameHeight = doc.font('Helvetica').fontSize(8.5).heightOfString(name, { width: 255 });
-      const rowHeight = Math.max(28, Math.ceil(nameHeight) + 11);
-      if (y + rowHeight > CONTENT_BOTTOM) {
-        doc.addPage();
-        continuationHeader(doc, report);
-        y = 104;
-        heading();
-      }
-      doc.font('Helvetica').fontSize(8.5).fillColor(INK)
-        .text(name, LEFT + 3, y + 4, { width: 255 })
-        .text(String(count(service.measuredVisits)), LEFT + 264, y + 4, { width: 58, align: 'right' })
-        .text(minutes(service.meanAbsoluteErrorMinutes), LEFT + 325, y + 4, { width: 85, align: 'right' })
-        .text(`${count(service.withinFiveMinutes)} / ${count(service.measuredVisits)}`, LEFT + 413, y + 4, { width: 80, align: 'right' });
-      line(doc, LEFT, y + rowHeight - 3, RIGHT);
-      y += rowHeight;
-    });
-  }
-  return y;
-}
+   const monthly=new Map();for(const v of report.monthly||[]){if(!monthly.has(v.month))monthly.set(v.month,{month:v.month,total:0,completed:0,cancelled:0});const m=monthly.get(v.month);m.total+=n(v.total);m.completed+=n(v.completed);m.cancelled+=n(v.cancelled);}
+   // Fill absent months with zero so the timeline does not visually skip quiet periods.
+   const start=new Date(report.from+'T00:00:00Z'),end=new Date(report.to+'T00:00:00Z');start.setUTCDate(1);
+   for(let i=0;start<=end&&i<1200;i++,start.setUTCMonth(start.getUTCMonth()+1)){const key=start.toISOString().slice(0,7);if(!monthly.has(key))monthly.set(key,{month:key,total:0,completed:0,cancelled:0});}
+   const months=[...monthly.values()].sort((a,b)=>a.month.localeCompare(b.month));
+   const monthGroups=[];for(let i=0;i<months.length;i+=8)monthGroups.push(months.slice(i,i+8));if(!monthGroups.length)monthGroups.push([]);
+   monthGroups.forEach((group,index)=>{
+    page('04 / Monthly activity',index?'Monthly activity (continued)':'How did activity change by month?','Months group visits by their queue date. Partial months include only the selected dates.');
+    legend([{label:'All included visits',color:C.blue},{label:'Completed visits',color:C.teal}],L,190);
+    const x=L+28,top=248,h=205,bottom=top+h,cw=W-38,peak=Math.max(1,...group.map(v=>v.total)),axisStep=Math.max(1,Math.ceil(peak/4)),max=axisStep*4;
+    for(let i=0;i<=4;i++){const yy=bottom-h*i/4;doc.moveTo(x,yy).lineTo(L+W,yy).strokeColor(C.line).lineWidth(.5).stroke();txt(String(axisStep*i),L,yy-5,24,8,C.muted);}
+    const step=cw/Math.max(1,group.length),bar=Math.min(27,step*.28);
+    group.forEach((v,i)=>{const cx=x+step*(i+.5);const ht=h*v.total/max,hc=h*v.completed/max;if(ht)doc.rect(cx-bar-2,bottom-ht,bar,ht).fill(C.blue);if(hc)doc.rect(cx+2,bottom-hc,bar,hc).fill(C.teal);txt(v.month,cx-step*.46,bottom+12,step*.92,8,C.muted);txt(`${v.total} / ${v.completed}`,cx-step*.46,bottom+30,step*.92,8,C.ink,true);});
+    txt('Labels below each month: included visits / completed visits',L,507,W,8,C.muted);
+    const localTotal=group.reduce((sum,v)=>sum+v.total,0),localDone=group.reduce((sum,v)=>sum+v.completed,0);
+    noteBox('Reading this chart',group.length>1?`These months contain ${localTotal} included visits and ${localDone} completed visits. Compare bar heights for volume. Different month lengths and partial months can affect the totals.`:'Only one month is represented. This chart shows its volume; a longer reporting period is needed to compare months.',550);
+    txt('Service-specific monthly counts are available by choosing a clinic service before generating the report. A completed visit is counted in its queue month, even if the status changed later.',L,660,W,9,C.muted);
+   });
 
-function visitReview(doc, report, y) {
-  if (!report.visits) return y;
-  if(y+170>CONTENT_BOTTOM){doc.addPage(); continuationHeader(doc, report); y=103;}else y+=24;
-  y=section(doc,'05','Visit review',y);
-  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text('Latest '+report.visits.length+' of '+report.detailTotal+' visits. Automatically excluded visits remain visible for transparency. No patient names or identification numbers are included.',LEFT,y,{width:WIDTH});y+=36;
-  function heading(){doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('TICKET / STATUS',LEFT,y,{width:190}).text('WAIT / CONSULT',LEFT+196,y,{width:115}).text('PRED / ERROR',LEFT+314,y,{width:90}).text('REVIEW',LEFT+408,y,{width:90});line(doc,LEFT,y+17,RIGHT);y+=24;}
-  heading();
-  for(const v of report.visits){
-    const label='Q'+v.serviceId+'-'+String(v.queueNumber).padStart(3,'0')+' / '+v.status.replaceAll('_',' ')+' / '+(v.included?'included':'excluded');
-    const review=v.flags.join(', ')||'No flags';
-    const height=Math.max(43,doc.font('Helvetica').fontSize(8).heightOfString(review,{width:90})+12,doc.heightOfString(label+'\n'+v.serviceName,{width:190})+12);
-    if(y+height>CONTENT_BOTTOM){doc.addPage();continuationHeader(doc,report);y=103;heading();}
-    doc.font('Helvetica').fontSize(8).fillColor(INK).text(label+'\n'+v.serviceName,LEFT,y,{width:190});
-    doc.text((v.waitMinutes==null&&v.elapsedWaitMinutes!=null?'Open '+minutes(v.elapsedWaitMinutes):minutes(v.waitMinutes))+' / '+(v.consultationMinutes==null&&v.elapsedConsultationMinutes!=null?'Open '+minutes(v.elapsedConsultationMinutes):minutes(v.consultationMinutes)),LEFT+196,y,{width:115});
-    doc.text(minutes(v.predictedMinutes)+' / '+minutes(v.errorMinutes),LEFT+314,y,{width:90});
-    doc.text(review,LEFT+408,y,{width:90});line(doc,LEFT,y+height-6,RIGHT);y+=height;
-  }
-  return y;
-}
+   page('05 / Prediction and report notes','Understand the estimates','Prediction performance uses recorded estimates and measured consultation-start waiting times.');
+   const model=n(prediction.modelVisits),within=n(prediction.withinFiveMinutes);
+   card('ML VISITS MEASURED',model,'With a saved estimate and actual wait',L,196);
+   card('AVERAGE ERROR',model?mins(prediction.meanAbsoluteErrorMinutes):'Not measured','Mean absolute difference',L+173,196);
+   card('WITHIN 5 MINUTES',model?`${pct(within,model)}%`:'Not measured',`${within} of ${model} measured ML visits`,L+346,196);
+   heading('How close were the estimates?',319,model?'Measured ML visits only; fallback estimates are excluded.':'No matched ML estimate and actual wait is available for this period.');
+   stacked([{value:within,color:C.teal},{value:Math.max(0,model-within),color:C.amber}],L,375,W,20);
+   legend([{label:`Within 5 min: ${within}`,color:C.teal},{label:`Over 5 min: ${Math.max(0,model-within)}`,color:C.amber}],L,410);
+   txt(`${n(prediction.fallbackVisits)} measured fallback estimates are excluded from ML accuracy. Local results do not replace the model's original dataset evaluation.`,L,447,W,9,C.muted);
+   noteBox('What the statistics mean','Visits are queue entries, so a returning patient can be counted more than once. Average wait runs from joining the queue to starting consultation. Average consultation runs from consultation start to completion. Open visits do not enter completed-duration averages. Cancelled and other statuses are counted at export time.',503);
+   txt(`Report scope: ${scope}. The statistics use automatically included records for ${date(report.from)} to ${date(report.to)}. Visit review and its CSV export retain excluded records for checking.`,L,654,W,9,C.muted);
 
-function definitions(doc, report, y) {
-  const scope = report.quality ? `Automatic filtering. Included ${report.quality.includedVisits} of ${report.quality.totalVisits} visits. Excluded by scope: ${report.quality.excludedByScope}; excluded unusual: ${report.quality.excludedUnusual}. Review thresholds: wait ${report.quality.waitReviewMinutes} min, consultation ${report.quality.consultationReviewMinutes} min. Durations are never capped. ` : '';
-  const notes = scope + 'Counts cover tickets dated in this period; statuses reflect export time. Other includes waiting, called, or in-progress entries. Average wait is joining to consultation start; average consultation is start to completion. ML accuracy compares the saved joining estimate with actual join-to-consultation wait. Only visits with both values are measured; fallback estimates are excluded. These local measurements are separate from the original dataset evaluation. All visit types are evaluated by the same automatic duration checks; these checks do not establish real-clinic accuracy.';
-  doc.font('Helvetica').fontSize(8.5);
-  const height = doc.heightOfString(notes, { width: WIDTH, lineGap: 2 });
-  if (y + 55 + height > CONTENT_BOTTOM) {
-    doc.addPage();
-    continuationHeader(doc, report);
-    y = 103;
-  } else y += 23;
-  y = section(doc, '06', 'Scope and definitions', y);
-  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
-    .text(notes, LEFT, y, { width: WIDTH, lineGap: 2 });
+   if(report.includeVisitDetails){
+    page('Appendix / Visit review','Supporting visit records','Includes excluded visits. No patient names or identification numbers are printed.');let y=195;
+    for(const v of report.visits||[]){
+     const lines=`Q${v.serviceId}-${String(v.queueNumber).padStart(3,'0')} | ${v.serviceName}\n${v.status.replaceAll('_',' ')} | ${v.included?'Included':'Excluded'} | Actual wait: ${mins(v.waitMinutes)} | Consultation: ${mins(v.consultationMinutes)}\nEstimate: ${mins(v.predictedMinutes)} | Error: ${mins(v.errorMinutes)} | Review: ${(v.flags||[]).join(', ')||'No flags'}`;
+     const height=txtHeight(lines,W,8)+24;
+     if(y+height>BOTTOM){page('Appendix / Visit review','Visit records (continued)','Full detail for the selected period and service.');y=195;}
+     txt(lines,L,y,W,8);y+=height;rule(y-11);
+    }
+   }
+   const {start:pageStart,count:pages}=doc.bufferedPageRange();
+   for(let i=pageStart;i<pageStart+pages;i++){doc.switchToPage(i);rule(770);txt('MediQ | Internal operational report',L,782,370,8,C.muted);txt(`${i-pageStart+1} / ${pages}`,L+W-40,782,40,8,C.muted);}
+   doc.end();
+  }catch(error){reject(error);}
+ });
 }
-
-function footers(doc) {
-  const { start, count: pages } = doc.bufferedPageRange();
-  for (let index = start; index < start + pages; index++) {
-    doc.switchToPage(index);
-    line(doc, LEFT, 771, RIGHT);
-    doc.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text('MediQ  |  Internal operational report', LEFT, 782, { width: 360 });
-    doc.text(`Page ${index - start + 1} of ${pages}`, RIGHT - 100, 782, { width: 100, align: 'right' });
-  }
-}
-
-function generateStaffReportPdf(report, generatedAt = new Date()) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 42, bufferPages: true });
-    const chunks = [];
-    doc.on('data', chunk => chunks.push(chunk));
-    doc.on('error', reject);
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    try {
-      doc.info.Title = 'MediQ queue activity report';
-      doc.info.Author = 'MediQ';
-      doc.info.CreationDate = generatedAt;
-      firstPageHeader(doc, report, generatedAt);
-      let y = executiveSummary(doc, report);
-      y = results(doc, report, y);
-      y = serviceTable(doc, report, y);
-      y = predictionAccuracy(doc, report, y);
-      y = visitReview(doc, report, y);
-      definitions(doc, report, y);
-      footers(doc);
-      doc.end();
-    } catch (error) { reject(error); }
-  });
-}
-
-module.exports = { generateStaffReportPdf };
+module.exports={generateStaffReportPdf};

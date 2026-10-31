@@ -97,3 +97,10 @@
 #service-dialog .service-form-footer { flex-shrink: 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin: 0; padding: 18px 28px; border-top: 1px solid #e9e2f0; background: white; }
 #service-dialog .service-form-footer button { min-height: 44px; }
 @media(max-width:560px) { #service-dialog .service-form-grid { grid-template-columns: minmax(0,1fr); } #service-dialog .service-form-header { padding: 20px; } #service-dialog .service-form-content { padding: 20px; } #service-dialog .service-form-footer { padding: 16px 20px; } #service-dialog .service-form-footer button { flex: 1; } }
+.patient-account-state { display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;font-size:.8rem;color:var(--staff-muted); }
+.patient-account-edit { display:grid;grid-template-columns:1fr 1fr auto;gap:16px;align-items:end;margin:20px 0;padding:20px;border:1px solid var(--staff-line);border-radius:12px;background:#faf8fd; }
+.patient-account-edit h4,.patient-account-edit p { grid-column:1/-1;margin:0; }
+.patient-account-edit label { display:grid;gap:8px;font-size:.85rem;font-weight:650; }
+.patient-account-edit input { width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid var(--staff-line);border-radius:9px;font:inherit; }
+[data-panel="patients"] .admin-card-actions { justify-content:flex-start;flex-wrap:wrap; }
+@media(max-width:700px){.patient-account-edit{grid-template-columns:1fr;}}

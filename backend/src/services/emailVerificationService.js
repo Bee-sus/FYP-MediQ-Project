@@ -68,4 +68,19 @@ async function sendStaffWelcomeEmail({ email, fullName, staffCode, temporaryPass
   return { sent: true, previewUrl: null };
 }
 
-module.exports = { createVerificationToken, sendVerificationEmail, sendStaffWelcomeEmail, hashToken };
+async function sendQueueCallEmail({ email, ticket, serviceName }) {
+  if (useLocalEmailPreview() || !process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return { sent: false };
+  const transport = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT || 587), secure: String(process.env.SMTP_SECURE).toLowerCase() === 'true', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 10000 });
+  const result = await transport.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: email, subject: `MediQ: ${ticket} has been called`, text: `Your queue ticket ${ticket} for ${serviceName} has been called. Please proceed to the clinic counter now.` });
+  return { sent: Boolean(result.accepted?.length) };
+}
+
+async function sendPatientOtpEmail({email,code}){
+ if(useLocalEmailPreview())return {sent:false,previewCode:code};
+ if(!process.env.SMTP_HOST||!process.env.SMTP_USER||!process.env.SMTP_PASSWORD)return {sent:false};
+ const transport=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE).toLowerCase()==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASSWORD},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000});
+ const result=await transport.sendMail({from:process.env.SMTP_FROM||process.env.SMTP_USER,to:email,subject:'Your MediQ email verification code',text:`Your MediQ verification code is ${code}.\n\nIt expires in 10 minutes. Use the newest code and do not share it. If you did not create this account, ignore this email.`});
+ return {sent:Boolean(result.accepted?.length)};
+}
+
+module.exports = { createVerificationToken, sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail, sendPatientOtpEmail, hashToken };

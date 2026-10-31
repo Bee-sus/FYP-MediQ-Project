@@ -12,6 +12,7 @@ function setup(status, { arrivedAt = null, busy = false, failNotice = false } = 
       if (sql.includes('SELECT q.id')) return [[{ id: 4, patientId: 7, serviceId: 1, queueNumber: 2, serviceName: 'General', status, arrivedAt }]];
       if (sql.includes("status IN ('called','in_progress')")) return [busy ? [{ id: 8 }] : []];
       if (sql.includes('INSERT INTO notifications') && failNotice) throw new Error('offline');
+      if (sql.trimStart().startsWith('SELECT')) return [[]];
       return [{ affectedRows: 1 }];
     }),
   };
@@ -46,6 +47,19 @@ test('arrived patient can be recalled when the service is free', async () => {
   expect((await update('called')).status).toBe(200);
   expect(db.commit).toHaveBeenCalledTimes(1);
   expect(db.execute.mock.calls.some(call => call[0].includes('called_at = CURRENT_TIMESTAMP'))).toBe(true);
+});
+
+test('an ordinary call cannot interrupt a called patient or consultation', async () => {
+  const db = setup('waiting', { busy: true });
+  expect((await update('called')).status).toBe(409);
+  expect(db.execute.mock.calls.some(([sql]) => sql.startsWith('UPDATE queue_entries'))).toBe(false);
+  expect(db.commit).not.toHaveBeenCalled();
+});
+
+test('an ordinary call succeeds when the service is free', async () => {
+  const db = setup('waiting');
+  expect((await update('called')).status).toBe(200);
+  expect(db.commit).toHaveBeenCalledTimes(1);
 });
 test('notification failure rolls back missed-call update', async () => {
   const db = setup('called', { failNotice: true });

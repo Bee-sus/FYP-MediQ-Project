@@ -4,9 +4,11 @@ const { pool } = require('../config/database');
 const { hashPassword, verifyPassword, meetsPasswordRules } = require('../services/passwordService');
 const { authenticate, tokenHash } = require('../middleware/authentication');
 const { createVerificationToken, sendVerificationEmail, hashToken } = require('../services/emailVerificationService');
+const {createPatientVerification}=require('../services/patientOtpService');
 
 const { validateIdentity } = require('../services/patientIdentity');
 const router = express.Router();
+router.use(require('./patientVerificationRoutes'));
 const roles = new Set(['patient', 'staff', 'admin']);
 const genders = new Set(['female', 'male', 'other', 'prefer-not-to-say']);
 
@@ -47,14 +49,8 @@ router.post('/register', async (request, response) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'patient')`,
       [values.name, values.email, passwordHash, values.phone, values.birthDate, values.gender, values.identificationType, values.identificationNumber],
     );
-    const token = await createVerificationToken(pool, result.insertId);
-    let delivery;
-    try { delivery = await sendVerificationEmail({ email: values.email, fullName: values.name, token }); }
-    catch (error) { delivery = { sent: false, previewUrl: null }; }
-    const message = delivery.sent ? 'Account created. Check your email to verify your address.'
-      : delivery.previewUrl ? 'Account created. Open the local verification link to continue.'
-        : 'Account created, but the verification email could not be sent. Check the mail settings.';
-    return response.status(201).json({ message, userId: result.insertId, requiresVerification: true, verificationPreviewUrl: process.env.NODE_ENV === 'production' ? null : delivery.previewUrl });
+    const verificationSession=await createPatientVerification(pool,result.insertId);
+    return response.status(201).json({message:'Account created. Verify your email to finish registration.',userId:result.insertId,requiresVerification:true,verificationMethod:'otp',verificationSession,verificationEmail:values.email});
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') return response.status(409).json({ error: 'An account already uses this email address.', fields: { email: 'Email address is already registered.' } });
     return response.status(503).json({ error: 'Registration is unavailable. Check the database connection and try again.' });
@@ -71,7 +67,10 @@ router.post('/login', async (request, response) => {
     if (!user || !user.is_active || user.role !== role || !(await verifyPassword(request.body.password, user.password_hash))) {
       return response.status(401).json({ error: 'The sign-in details are incorrect for this portal.' });
     }
-    if (user.role !== 'admin' && user.email_verified_at === null) return response.status(403).json({ error: 'Verify your email address before signing in.', emailVerificationRequired: true });
+    if (user.role !== 'admin' && user.email_verified_at === null) {
+      const verification = user.role==='patient'?{verificationMethod:'otp',verificationSession:await createPatientVerification(pool,user.id),verificationEmail:user.email}:{};
+      return response.status(403).json({error:'Verify your email address before signing in.',emailVerificationRequired:true,...verification});
+    }
     const token = crypto.randomBytes(32).toString('base64url');
     const maxAge = setSessionCookie(response, token, Boolean(request.body.remember));
     await pool.execute('INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))', [user.id, tokenHash(token), maxAge]);
@@ -101,6 +100,8 @@ router.post('/verify-email', async (request, response) => {
 
 router.post('/resend-verification', async (request, response) => {
   const email = String(request.body.email || '').trim().toLowerCase(); const role = String(request.body.role || 'patient');
+  if(role==='patient')return response.json({message:'Sign in with your patient email and password to request a verification code.'});
+  if(role!=='staff')return response.status(422).json({error:'Select a valid verification role.'});
   try {
     const [rows] = await pool.execute('SELECT id, full_name AS fullName, email, email_verified_at AS verifiedAt FROM users WHERE email = ? AND role = ? AND is_active = TRUE LIMIT 1', [email, role]);
     if (!rows.length || rows[0].verifiedAt) return response.json({ message: 'If an unverified account exists, a new verification email has been prepared.' });

@@ -112,7 +112,7 @@ describe('system endpoints', () => {
     expect(response.text).toContain('aria-label="Show password"');
   });
 
-  test.each(['/patient-login.html', '/staff-login.html'])('%s lets an unverified account request another link', async (path) => {
+  test.each(['/staff-login.html'])('%s lets an unverified account request another link', async (path) => {
     const response = await request(app).get(path);
     expect(response.statusCode).toBe(200);
     expect(response.text).toContain('class="resend-verification"');
@@ -132,8 +132,7 @@ describe('system endpoints', () => {
   test('registers valid public accounts as patients only', async () => {
     const execute = jest.spyOn(pool, 'execute')
       .mockResolvedValueOnce([{ insertId: 42 }])
-      .mockResolvedValueOnce([{ affectedRows: 0 }])
-      .mockResolvedValueOnce([{ insertId: 1 }]);
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
     const response = await request(app).post('/api/auth/register').send({
       fullName: 'Test Patient', email: 'patient@example.com', phone: '+60 12-345 6789',
       birthDate: '2000-01-01', gender: 'prefer-not-to-say', password: 'Strong-Patient-2026!',
@@ -142,7 +141,9 @@ describe('system endpoints', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.body).toMatchObject({ userId: 42, requiresVerification: true });
-    expect(response.body.verificationPreviewUrl).toContain('/verify-email.html?token=');
+    expect(response.body.verificationMethod).toBe('otp');
+    expect(response.body.verificationSession).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(response.body).not.toHaveProperty('verificationPreviewUrl');
     expect(execute.mock.calls[0][0]).toContain("'patient'");
     expect(execute.mock.calls[0][1][2]).not.toContain('Strong-Patient-2026!');
     execute.mockRestore();
@@ -321,7 +322,7 @@ describe('system endpoints', () => {
     ]]);
     const connection = {
       beginTransaction: jest.fn().mockResolvedValue(),
-      execute: jest.fn().mockResolvedValueOnce([[
+      execute: jest.fn().mockResolvedValueOnce([[{ id: 2 }]]).mockResolvedValueOnce([[
         { id: 81, patientId: 21, status: 'waiting', queueNumber: 3, serviceName: 'General Consultation' },
       ]]),
       commit: jest.fn(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
@@ -343,13 +344,15 @@ describe('system endpoints', () => {
   test('updates a queue through a valid Staff transition with notification and audit', async () => {
     const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
       { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
-    ]]);
+    ]]).mockResolvedValue([[]]);
     const connection = {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 2 }]])
         .mockResolvedValueOnce([[
           { id: 81, patientId: 21, serviceId: 2, status: 'waiting', queueNumber: 3, serviceName: 'General Consultation' },
         ]])
+        .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ insertId: 103 }])
@@ -364,10 +367,9 @@ describe('system endpoints', () => {
       .send({ status: 'called' });
 
     expect(response.statusCode).toBe(200);
-    expect(connection.execute.mock.calls[2][0]).toContain('called_at = CURRENT_TIMESTAMP');
-    expect(connection.execute.mock.calls[3][0]).toContain('notifications');
-    expect(connection.execute.mock.calls[4][0]).toContain('staff_audit_logs');
-    expect(connection.execute.mock.calls[4][1][3]).toContain('Q2-003');
+    expect(connection.execute.mock.calls.find(([sql]) => sql.startsWith('UPDATE queue_entries'))[0]).toContain('called_at = CURRENT_TIMESTAMP');
+    expect(connection.execute.mock.calls.some(([sql]) => sql.includes('INSERT INTO notifications'))).toBe(true);
+    expect(connection.execute.mock.calls.find(([sql]) => sql.includes('INSERT INTO staff_audit_logs'))[1][3]).toContain('Q2-003');
     expect(response.body.message).toContain('Q2-003');
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
@@ -378,11 +380,13 @@ describe('system endpoints', () => {
   test('completes a consultation and calls the next waiting patient in one transaction', async () => {
     const execute = jest.spyOn(pool, 'execute').mockResolvedValueOnce([[
       { id: 7, fullName: 'Clinic Staff', email: 'staff@example.com', role: 'staff' },
-    ]]);
+    ]]).mockResolvedValue([[]]);
     const connection = {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 2 }]])
         .mockResolvedValueOnce([[{ id: 81, patientId: 21, serviceId: 2, status: 'in_progress', queueNumber: 1, serviceName: 'General Consultation' }]])
+        .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[{ id: 82, patientId: 22, queueNumber: 2 }]])
         .mockResolvedValue([{ affectedRows: 1 }]),
       commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
@@ -396,11 +400,9 @@ describe('system endpoints', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toMatchObject({ calledQueueId: 82 });
     expect(response.body.message).toContain('Q2-001 completed and Q2-002 called');
-    expect(connection.execute.mock.calls[1][0]).toContain("status = 'waiting'");
-    expect(connection.execute.mock.calls[1][0]).toContain('ORDER BY queue_number LIMIT 1 FOR UPDATE');
-    expect(connection.execute.mock.calls[2][0]).toContain("status = 'completed'");
-    expect(connection.execute.mock.calls[5][0]).toContain("status = 'called'");
-    expect(connection.execute.mock.calls[5][1]).toEqual([82]);
+    expect(connection.execute.mock.calls.some(([sql]) => sql.includes('ORDER BY queue_number LIMIT 1 FOR UPDATE'))).toBe(true);
+    expect(connection.execute.mock.calls.some(([sql]) => sql.startsWith('UPDATE queue_entries') && sql.includes("status = 'completed'"))).toBe(true);
+    expect(connection.execute.mock.calls.find(([sql]) => sql.startsWith('UPDATE queue_entries') && sql.includes("status = 'called'"))[1]).toEqual([82]);
     expect(connection.execute.mock.calls.filter(([sql]) => sql.includes('INSERT INTO notifications'))).toHaveLength(2);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
@@ -415,7 +417,9 @@ describe('system endpoints', () => {
     const connection = {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
+        .mockResolvedValueOnce([[{ id: 2 }]])
         .mockResolvedValueOnce([[{ id: 81, patientId: 21, serviceId: 2, status: 'in_progress', queueNumber: 1, serviceName: 'General Consultation' }]])
+        .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[{ id: 82, patientId: 22, queueNumber: 2 }]])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ insertId: 1 }])
@@ -600,6 +604,7 @@ describe('system endpoints', () => {
       beginTransaction: jest.fn().mockResolvedValue(),
       execute: jest.fn()
         .mockResolvedValueOnce([[{ id: 1 }]])
+        .mockResolvedValueOnce([[{ id: 21, isActive: 1 }]])
         .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isOpen: 1, opensAt: '09:00', closesAt: '17:00', breakStart: '12:00', breakEnd: '14:00' }))])
         .mockResolvedValueOnce([[{ id: 2, name: 'General Consultation' }]])
@@ -616,7 +621,7 @@ describe('system endpoints', () => {
 
     expect(response.statusCode).toBe(201);
     expect(response.body.appointmentId).toBe(44);
-    expect(connection.execute.mock.calls[5][1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
+    expect(connection.execute.mock.calls.find(([sql])=>sql.includes('INSERT INTO appointments'))[1]).toEqual([21, 2, '2099-10-10', '10:30', 'Routine follow-up']);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
     execute.mockRestore();

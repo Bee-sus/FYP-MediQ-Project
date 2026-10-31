@@ -9,6 +9,8 @@ const { migrateQueueTools } = require('./queueToolsMigration');
 const { migrateMissedCalls } = require('./missedCallMigration');
 const { migrateArrival } = require('./arrivalMigration');
 const { migrateAdmin } = require('./adminMigration');
+const { migrateIntegrity } = require('./integrityMigration');
+const { databaseDateOptions, setClinicTimeZone } = require('../backend/src/config/clinicTime');
 const { hashPassword, meetsPasswordRules } = require('../backend/src/services/passwordService');
 
 async function seedControlledAccount(connection, role, name, email, password) {
@@ -38,11 +40,14 @@ async function setup() {
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost', port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER || 'root', password: process.env.DB_PASSWORD || '', multipleStatements: true,
+    ...databaseDateOptions,
   });
   try {
+    await setClinicTimeZone(connection);
     const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await connection.query(schema);
     await connection.changeUser({ database: process.env.DB_NAME || 'mediq' });
+    await setClinicTimeZone(connection);
     await addColumnIfMissing(connection, 'queue_entries', 'cancelled_at', 'TIMESTAMP NULL AFTER completed_at');
     await addColumnIfMissing(connection, 'queue_entries', 'cancellation_reason', 'VARCHAR(300) NULL AFTER cancelled_at');
     await addColumnIfMissing(connection, 'queue_entries', 'consultation_started_at', 'TIMESTAMP NULL AFTER called_at');
@@ -58,6 +63,7 @@ async function setup() {
     await migrateQueueTools(connection);
     await migratePatientIdentity(connection);
     await migrateReportQuality(connection);
+    await migrateIntegrity(connection);
     await seedControlledAccount(connection, 'staff', process.env.SEED_STAFF_NAME || 'Clinic Staff', process.env.SEED_STAFF_EMAIL, process.env.SEED_STAFF_PASSWORD);
     await seedControlledAccount(connection, 'admin', process.env.SEED_ADMIN_NAME || 'System Administrator', process.env.SEED_ADMIN_EMAIL, process.env.SEED_ADMIN_PASSWORD);
     console.log('MediQ database schema is ready.');

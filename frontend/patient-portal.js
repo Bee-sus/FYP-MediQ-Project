@@ -87,9 +87,11 @@ function createServiceCard(service) {
   const card = document.createElement('article');
   card.className = 'feature-service-card';
   card.dataset.queueStatus = availability.status;
+  const name=String(service.name||'').toLowerCase();
+  const icon=/dental|dentist/.test(name)?'dental':/follow/.test(name)?'followup':/pharmacy|medication/.test(name)?'pharmacy':/specialist/.test(name)?'specialist':/general|consultation/.test(name)?'general':null;
   card.innerHTML = `
-    <div class="feature-service-icon" aria-hidden="true">+</div>
-    <div class="feature-service-copy"><h2></h2><p></p><div class="service-availability"><span class="queue-load-badge"></span><strong class="service-availability-wait"></strong><small class="service-availability-count"></small></div><p class="service-availability-advice"></p></div>
+    <div class="service-card-header"><div class="feature-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="/portal-icons.svg#${icon?'service-'+icon:'services'}"></use></svg></div><div class="feature-service-copy"><h2></h2><p></p></div></div>
+    <div class="service-availability"><span class="queue-load-badge"></span><small class="service-availability-count"></small></div><p class="service-availability-advice"></p>
     <div class="feature-service-actions">
       <a class="secondary-card-action">Book appointment</a>
       <a class="primary-card-action">Join queue</a>
@@ -97,10 +99,11 @@ function createServiceCard(service) {
   `;
   card.querySelector('h2').textContent = service.name;
   card.querySelector('p').textContent = `${service.doctorName ? `Dr. ${service.doctorName} · ` : ''}${service.serviceDetails || service.description || 'Clinic consultation service.'}`;
-  card.querySelector('.queue-load-badge').textContent = availability.label;
-  card.querySelector('.service-availability-wait').textContent = availability.waitText;
+  card.querySelector('.queue-load-badge').textContent = availability.status==='quiet'?'Available':availability.label;
   card.querySelector('.service-availability-count').textContent = `${availability.activePatients} ${availability.activePatients === 1 ? 'patient' : 'patients'} ahead`;
   card.querySelector('.service-availability-advice').textContent = service.delayNotice ? `Service update: ${service.delayNotice} · Waiting times may change.` : availability.advice;
+  card.querySelector('.service-availability-advice').hidden=!service.delayNotice&&availability.status==='quiet';
+  card.querySelector('.service-availability-count').hidden=availability.status==='closed';
   card.querySelector('.secondary-card-action').href = `/appointments.html?service=${service.id}`;
   const joinLink = card.querySelector('.primary-card-action');
   if (availability.status === 'closed' || availability.status === 'full') {

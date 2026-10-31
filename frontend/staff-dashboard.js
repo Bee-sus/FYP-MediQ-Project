@@ -341,7 +341,28 @@ async function loadStaffDashboard(afterMutation = false) {
     ]);
     if (loadVersion !== queueLoadVersion || document.querySelector('dialog[open]') || (queueMutationPending && !afterMutation)) return;
     document.querySelector('#staff-name').textContent = overview.user.fullName;
-    if (staffPage === 'overview') renderSummary(overview.summary);
+    if (staffPage === 'overview') {
+      renderSummary(overview.summary);
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      try {
+        const report = await staffApi(`/api/staff/reports?from=${today.slice(0,7)}-01&to=${today}`);
+        let charts = document.querySelector('#overview-statistics');
+        if (!charts) { charts = document.createElement('section'); charts.id = 'overview-statistics'; charts.className = 'report-chart-grid'; document.querySelector('#staff-summary').after(charts); }
+        charts.replaceChildren();
+        const groups = [
+          ['This month: patient outcomes', [{label:'Completed',value:report.summary.completed},{label:'Cancelled',value:report.summary.cancelled},{label:'Active / other',value:report.summary.totalPatients-report.summary.completed-report.summary.cancelled}]],
+          ['This month: completed by service',report.services.map(s=>({label:s.serviceName,value:s.completed}))],
+        ];
+        for (const [title,items] of groups) {
+          const section = document.createElement('section'); const heading = document.createElement('h3'); heading.textContent = title; section.append(heading);
+          const max = Math.max(1,...items.map(item=>Number(item.value))); const bars = document.createElement('div'); bars.className = 'report-bars';
+          for (const item of items) { const row = document.createElement('div'); row.innerHTML = '<div><span></span><strong></strong></div><div class="report-bar-track"><span></span></div>'; row.querySelector('span').textContent = item.label; row.querySelector('strong').textContent = item.value; row.querySelector('.report-bar-track span').style.width = `${item.value/max*100}%`; bars.append(row); }
+          if (!items.length) bars.textContent = 'No visits recorded this month.';
+          section.append(bars); charts.append(section);
+        }
+      } catch (_) { /* Summary remains available if statistics cannot load. */ }
+    }
     if (staffPage === 'queue') {
       queueSnapshot = queueData; renderQueueSnapshot();
       if (previousQueueEntries) {
@@ -362,6 +383,7 @@ async function loadStaffDashboard(afterMutation = false) {
 }
 
 document.querySelector('#refresh-button').addEventListener('click', () => {
+  if (staffPage === 'reports') { window.dispatchEvent(new Event('refresh-staff-report')); return; }
   if (staffPage === 'profile') { loadStaffProfile(); return; }
   loadStaffDashboard();
   if (staffPage === 'appointments') loadStaffAppointments();

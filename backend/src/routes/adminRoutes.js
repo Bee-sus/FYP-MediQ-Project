@@ -6,6 +6,7 @@ const { validProfilePicture } = require('../services/profilePictureService');
 const { createVerificationToken, sendStaffWelcomeEmail } = require('../services/emailVerificationService');
 const { lockBookings, activeStatuses } = require('../services/appointmentService');
 const { validateHours, readHours, slotsForDate } = require('../services/clinicScheduleService');
+const { clinicDate } = require('../config/clinicTime');
 
 const router = express.Router();
 router.use(...requireRole('admin'));
@@ -36,7 +37,7 @@ async function transaction(response, work) {
 
 router.get('/overview', async (request, response) => {
   try {
-    const [users] = await pool.execute("SELECT SUM(role = 'patient') AS patients, SUM(role = 'staff' AND is_active = TRUE) AS activeStaff FROM users");
+    const [users] = await pool.execute("SELECT SUM(role = 'patient' AND deleted_at IS NULL) AS patients, SUM(role = 'staff' AND is_active = TRUE) AS activeStaff FROM users");
     const [services] = await pool.execute('SELECT COUNT(*) AS activeServices FROM clinic_services WHERE is_active = TRUE');
     const [appointments] = await pool.execute("SELECT COUNT(*) AS pendingAppointments FROM appointments WHERE status = 'pending'");
     return response.json({ user: request.user, summary: { patients: Number(users[0].patients || 0), activeStaff: Number(users[0].activeStaff || 0), activeServices: Number(services[0].activeServices), pendingAppointments: Number(appointments[0].pendingAppointments) } });
@@ -45,7 +46,10 @@ router.get('/overview', async (request, response) => {
 
 router.get('/staff', async (request, response) => {
   try {
-    const [staff] = await pool.execute("SELECT id, staff_code AS staffCode, full_name AS fullName, email, phone_number AS phone, profile_picture_url AS profilePictureUrl, is_active AS isActive, created_at AS createdAt FROM users WHERE role = 'staff' ORDER BY full_name, id");
+    const [staff] = await pool.execute(`SELECT u.id, u.staff_code AS staffCode, u.full_name AS fullName, u.email,
+      u.phone_number AS phone, u.profile_picture_url AS profilePictureUrl, u.is_active AS isActive, u.created_at AS createdAt,
+      EXISTS(SELECT 1 FROM staff_audit_logs a WHERE a.staff_id = u.id) AS hasActivityHistory
+      FROM users u WHERE u.role = 'staff' ORDER BY u.full_name, u.id`);
     return response.json({ staff });
   } catch (error) { return response.status(503).json({ error: 'Staff accounts are unavailable.' }); }
 });
@@ -106,9 +110,10 @@ router.delete('/staff/:staffId', async (request, response) => {
     const [rows] = await connection.execute("SELECT id, full_name AS fullName, staff_code AS staffCode FROM users WHERE id = ? AND role = 'staff' FOR UPDATE", [id]);
     if (!rows.length) throw problem(404, 'Staff account not found.');
     const staff = rows[0];
+    const [history] = await connection.execute('SELECT id FROM staff_audit_logs WHERE staff_id = ? LIMIT 1 FOR UPDATE', [id]);
+    if (history.length) throw problem(409, 'This staff account has activity history. Deactivate it to preserve clinic records.');
     await connection.execute('DELETE FROM user_sessions WHERE user_id = ?', [id]);
     await connection.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [id]);
-    await connection.execute('DELETE FROM staff_audit_logs WHERE staff_id = ?', [id]);
     await audit(connection, request.user.id, 'staff_deleted', 'staff', id, `Permanently deleted Staff account ${staff.staffCode || id} (${staff.fullName}).`);
     await connection.execute("DELETE FROM users WHERE id = ? AND role = 'staff'", [id]);
     return { body: { message: `Staff account for ${staff.fullName} was permanently deleted.` } };
@@ -125,8 +130,8 @@ router.get('/services', async (request, response) => {
 router.get('/patients', async (request, response) => {
   const query = String(request.query.query || '').trim().slice(0, 80); const page = Math.max(1, Number(request.query.page) || 1); const offset = (page - 1) * 20;
   try {
-    const [patients] = await pool.execute(`SELECT id, full_name AS fullName, email, phone_number AS phone, created_at AS createdAt
-      FROM users WHERE role = 'patient' AND (? = '' OR full_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)
+    const [patients] = await pool.execute(`SELECT id, full_name AS fullName, email, phone_number AS phone, is_active AS isActive, email_verified_at AS verifiedAt, created_at AS createdAt
+      FROM users WHERE role = 'patient' AND deleted_at IS NULL AND (? = '' OR full_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)
       ORDER BY full_name LIMIT 21 OFFSET ${offset}`, [query, `%${query}%`, `%${query}%`, `%${query}%`]);
     return response.json({ patients: patients.slice(0, 20), page, hasMore: patients.length > 20 });
   } catch (error) { return response.status(503).json({ error: 'Patient records are unavailable.' }); }
@@ -135,12 +140,48 @@ router.get('/patients', async (request, response) => {
 router.get('/patients/:patientId', async (request, response) => {
   const id = Number(request.params.patientId); if (!validId(id)) return response.status(422).json({ error: 'Invalid patient.' });
   try {
-    const [patients] = await pool.execute("SELECT id, full_name AS fullName, email, phone_number AS phone, birth_date AS birthDate, gender, created_at AS createdAt FROM users WHERE id = ? AND role = 'patient'", [id]);
+    const [patients] = await pool.execute("SELECT id, full_name AS fullName, email, phone_number AS phone, is_active AS isActive, birth_date AS birthDate, gender, created_at AS createdAt FROM users WHERE id = ? AND role = 'patient' AND deleted_at IS NULL", [id]);
     if (!patients.length) return response.status(404).json({ error: 'Patient not found.' });
     const [queues] = await pool.execute('SELECT q.queue_date AS queueDate, q.status, s.name AS serviceName FROM queue_entries q JOIN clinic_services s ON s.id = q.service_id WHERE q.patient_id = ? ORDER BY q.joined_at DESC LIMIT 20', [id]);
     const [appointments] = await pool.execute('SELECT a.appointment_date AS appointmentDate, a.appointment_time AS appointmentTime, a.status, s.name AS serviceName FROM appointments a JOIN clinic_services s ON s.id = a.service_id WHERE a.patient_id = ? ORDER BY a.appointment_date DESC LIMIT 20', [id]);
     return response.json({ patient: patients[0], queues, appointments });
   } catch (error) { return response.status(503).json({ error: 'Patient history is unavailable.' }); }
+});
+
+router.patch('/patients/:patientId',async(request,response)=>{
+ const id=Number(request.params.patientId),{isActive,fullName,phone}=request.body;
+ if(!validId(id))return response.status(422).json({error:'Choose a valid patient account.'});
+ const accessChange=typeof isActive==='boolean';
+ const name=String(fullName||'').trim(),contact=String(phone||'').trim();
+ if(!accessChange&&(name.length<2||name.length>120||!/^[\p{L}][\p{L} .'-]+$/u.test(name)||!/^[+0-9 ()-]+$/.test(contact)||contact.replace(/\D/g,'').length<8||contact.replace(/\D/g,'').length>15||contact.length>30))return response.status(422).json({error:'Enter a valid patient name and contact number.'});
+ return transaction(response,async connection=>{
+  const [rows]=await connection.execute("SELECT id FROM users WHERE id=? AND role='patient' AND deleted_at IS NULL FOR UPDATE",[id]);
+  if(!rows.length)throw problem(404,'Patient account not found.');
+  if(accessChange){await connection.execute("UPDATE users SET is_active=? WHERE id=? AND role='patient'",[isActive,id]);if(!isActive)await connection.execute('DELETE FROM user_sessions WHERE user_id=?',[id]);}
+  else await connection.execute("UPDATE users SET full_name=?,phone_number=? WHERE id=? AND role='patient'",[name,contact,id]);
+  await audit(connection,request.user.id,accessChange?(isActive?'patient_activated':'patient_deactivated'):'patient_updated','patient',id,accessChange?(isActive?'Patient access restored.':'Patient access disabled and sessions revoked.'):'Patient name and contact details updated.');
+  return {body:{message:accessChange?(isActive?'Patient account reactivated.':'Patient account deactivated and signed out.'):'Patient details saved.'}};
+ });
+});
+
+router.delete('/patients/:patientId',async(request,response)=>{
+ const id=Number(request.params.patientId);if(!validId(id))return response.status(422).json({error:'Choose a valid patient account.'});
+ return transaction(response,async connection=>{
+  await lockBookings(connection);
+  const [rows]=await connection.execute("SELECT id FROM users WHERE id=? AND role='patient' AND deleted_at IS NULL FOR UPDATE",[id]);
+  if(!rows.length)throw problem(404,'Patient account not found.');
+  const [queues]=await connection.execute("SELECT id FROM queue_entries WHERE patient_id=? AND status IN ('waiting','called','in_progress','not_present') LIMIT 1",[id]);
+  const [appointments]=await connection.execute("SELECT id FROM appointments WHERE patient_id=? AND status IN ('pending','approved','reschedule_proposed') LIMIT 1",[id]);
+  if(queues.length||appointments.length)throw problem(409,'Finish or cancel this patient’s active queue entries and appointments before deleting the account.');
+  await connection.execute('DELETE FROM user_sessions WHERE user_id=?',[id]);
+  await connection.execute('DELETE FROM email_verification_tokens WHERE user_id=?',[id]);
+  await connection.execute('DELETE FROM patient_email_codes WHERE user_id=?',[id]);
+  await connection.execute('DELETE FROM notifications WHERE patient_id=?',[id]);
+  const crypto=require('crypto');
+  await connection.execute(`UPDATE users SET full_name='Deleted patient',email=?,password_hash=?,phone_number=NULL,birth_date=NULL,gender=NULL,identification_type=NULL,identification_number=NULL,profile_picture_url=NULL,email_verified_at=NULL,is_active=FALSE,deleted_at=CURRENT_TIMESTAMP WHERE id=? AND role='patient'`,[`deleted-${id}-${crypto.randomBytes(12).toString('hex')}@example.invalid`,crypto.randomBytes(64).toString('hex'),id]);
+  await audit(connection,request.user.id,'patient_deleted','patient',id,'Patient account details removed and access revoked. Anonymised visit links retained.');
+  return {body:{message:'Patient account deleted. Linked clinic visit history has been retained anonymously.'}};
+ });
 });
 
 router.get('/settings', async (request, response) => {
@@ -173,7 +214,7 @@ async function saveService(request, response) {
       const [rows] = await connection.execute('SELECT id FROM clinic_services WHERE id = ? FOR UPDATE', [id]);
       if (!rows.length) throw problem(404, 'Clinic service not found.');
       if (!isActive) {
-        const [queues] = await connection.execute("SELECT id FROM queue_entries WHERE service_id = ? AND queue_date = CURRENT_DATE AND status IN ('waiting','called','in_progress') LIMIT 1", [id]);
+        const [queues] = await connection.execute("SELECT id FROM queue_entries WHERE service_id = ? AND queue_date = CURRENT_DATE AND status IN ('waiting','called','in_progress','not_present') LIMIT 1", [id]);
         const [bookings] = await connection.execute(`SELECT id FROM appointments WHERE service_id = ? AND appointment_date >= DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')) AND status IN (${activeStatuses}) LIMIT 1`, [id]);
         if (queues.length || bookings.length) throw problem(409, 'Resolve this service’s active queues and upcoming appointments before deactivating it.');
       }
@@ -237,7 +278,7 @@ router.get('/closures', async (request, response) => {
 router.post('/closures', async (request, response) => {
   const closureDate = String(request.body.closureDate || '');
   const reason = String(request.body.reason || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(closureDate) || closureDate < new Date().toISOString().slice(0, 10)) return response.status(422).json({ error: 'Choose today or a future closure date.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(closureDate) || closureDate < clinicDate()) return response.status(422).json({ error: 'Choose today or a future closure date.' });
   if (reason.length < 3 || reason.length > 200) return response.status(422).json({ error: 'Provide a closure reason between 3 and 200 characters.' });
   return transaction(response, async connection => {
     await lockBookings(connection);

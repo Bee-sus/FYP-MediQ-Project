@@ -11,5 +11,5 @@ const token = new URLSearchParams(window.location.search).get('token');
     card.dataset.state = 'success'; heading.textContent = result.role === 'staff' ? 'Staff email verified' : 'Email verified';
     description.textContent = result.role === 'staff' ? 'Your Staff account is ready. Sign in with the credentials provided by the clinic, then change your temporary password.' : 'Your account is ready. You can now sign in to MediQ.';
     status.textContent = result.message; status.className = 'form-status'; login.href = result.role === 'staff' ? '/staff-login.html' : '/patient-login.html'; login.hidden = false;
-  } catch (error) { card.dataset.state = 'error'; description.textContent = 'This link may have expired or already been used. Request a new account email from the clinic if needed.'; status.textContent = error.message || 'This verification link could not be used.'; status.className = 'form-status error'; }
+  } catch (error) { card.dataset.state = 'error'; document.querySelector('#verification-icon').textContent='!';description.textContent = 'This link may have expired or already been used. Request a new account email from the clinic if needed.'; status.textContent = error.message || 'This verification link could not be used.'; status.className = 'form-status error'; }
 })();

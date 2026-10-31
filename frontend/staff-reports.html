@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="action-dialog.css" />
     <script src="action-dialog.js"></script>
     <link rel="stylesheet" href="portal-polish.css" />
+    <link rel="stylesheet" href="staff-reports.css" />
   </head>
   <body class="staff-body" data-staff-page="reports">
     <header class="staff-header">
@@ -30,10 +31,11 @@
         <section class="staff-section" aria-labelledby="reports-heading">
           <div class="staff-section-heading"><div><h2 id="reports-heading">Generate staff report</h2><p>Choose a period to see patient outcomes, average wait and service activity.</p></div></div>
           <form id="report-form" class="staff-form-card">
-            <div class="report-presets" aria-label="Quick date ranges"><button type="button" data-report-days="0">Today</button><button type="button" data-report-days="6">Last 7 days</button><button type="button" data-report-days="29">Last 30 days</button></div>
-            <div class="staff-form-row"><label>Start date<input name="from" type="date" required /></label><label>End date<input name="to" type="date" required /></label></div>
-<p>Invalid or unusually long visits are filtered automatically. Original timestamps are preserved, and excluded visits are listed in the report.</p>
-            <button class="staff-primary-button" type="submit">Generate report</button>
+            <div class="report-filter-heading"><div><strong>Report filters</strong><span>Choose a period and clinic service.</span></div><button type="button" id="reset-report">Reset filters</button></div>
+            <div class="report-quick-ranges"><span>Quick range</span><div class="report-presets" aria-label="Quick date ranges"><button type="button" data-report-days="0">Today</button><button type="button" data-report-days="6">Last 7 days</button><button type="button" data-report-days="29">Last 30 days</button><button type="button" data-report-calendar="current">This month</button><button type="button" data-report-calendar="previous">Last month</button><button type="button" data-report-calendar="year">This year</button></div></div>
+            <div class="report-filter-fields"><label>Start date<input name="from" type="date" required /></label><label>End date<input name="to" type="date" required /></label><label>Month shortcut<input id="report-month" type="month" /></label><label>Clinic service<select name="serviceId" id="report-service"><option value="">All services</option></select></label></div>
+            <details class="report-filter-help"><summary>How figures are calculated</summary><p>Invalid or unusually long visits are filtered automatically. Monthly totals use the queue visit date. Original timestamps are preserved. Choosing a month fills the start and end dates for you.</p></details>
+            <div class="report-filter-footer"><p id="report-feedback" role="status" aria-live="polite"></p><button class="staff-primary-button" type="submit">Generate report</button></div>
           </form>
           <div id="report-result" class="report-result" aria-live="polite"></div>
         </section>

@@ -3,6 +3,8 @@ let scheduleRevision = null;
 let scheduleDirty = false;
 let editingServiceId = null;
 let auditPage = 1;
+let auditHasMore = false;
+let auditFilters = { role: '', query: '' };
 let patientPage = 1;
 let patientDisplayedPage = 1;
 let patientListVersion = 0;
@@ -285,24 +287,68 @@ $('#reload-hours').addEventListener('click', () => run(async () => {
 window.addEventListener('beforeunload', event => { if (scheduleDirty) { event.preventDefault(); event.returnValue = ''; } });
 
 let auditVersion = 0;
+function auditLabel(value) {
+  return String(value || '').replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
+}
+function activityEntry(item) {
+  const element = document.createElement('article');
+  element.className = 'audit-entry';
+  element.innerHTML = '<div class="audit-entry-symbol" aria-hidden="true"><svg class="portal-icon" focusable="false"><use></use></svg></div><div class="audit-entry-copy"><header><h3></h3><span class="audit-role"></span></header><p class="audit-description"></p><div class="audit-meta"><span class="audit-actor"></span><time></time><span class="audit-reference"></span></div></div>';
+  const icons = { staff: 'staff', patient: 'patients', clinic_service: 'services', clinic_hours: 'hours', clinic_closure: 'appointments', queue: 'queue', queue_entry: 'queue', appointment: 'appointments' };
+  element.querySelector('use').setAttribute('href', '/portal-icons.svg#' + (Object.hasOwn(icons, item.entityType) ? icons[item.entityType] : 'activity'));
+  element.querySelector('h3').textContent = auditLabel(item.action);
+  const role = element.querySelector('.audit-role');
+  role.textContent = item.actorRole;
+  role.dataset.role = item.actorRole;
+  element.querySelector('.audit-description').textContent = item.details || 'No additional details recorded.';
+  element.querySelector('.audit-actor').textContent = item.actorName;
+  const date = new Date(item.createdAt);
+  const time = element.querySelector('time');
+  if (Number.isFinite(date.getTime())) {
+    time.dateTime = date.toISOString();
+    time.textContent = new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' }).format(date);
+  } else time.textContent = 'Date unavailable';
+  element.querySelector('.audit-reference').textContent = `${auditLabel(item.entityType)} #${item.entityId}`;
+  return element;
+}
 async function loadAudit(page = 1) {
   const version = ++auditVersion;
-  const filters = new FormData($('#audit-filter-form'));
-  const data = await adminApi('/audit?page=' + page + '&role=' + encodeURIComponent(filters.get('role')) + '&query=' + encodeURIComponent(filters.get('query')));
-  if (version !== auditVersion) return;
-  auditPage = data.page;
-  $('#audit-list').replaceChildren(...data.items.map(item => {
-    const time = new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kuala_Lumpur' }).format(new Date(item.createdAt));
-    const element = card(item.action.replaceAll('_', ' '), `${item.actorName} · ${item.actorRole} · ${time} (Malaysia time)`);
-    const details = document.createElement('p');
-    details.textContent = `${item.entityType.replaceAll('_', ' ')} #${item.entityId} — ${item.details || ''}`;
-    element.append(details);
-    return element;
-  }));
-  if (!data.items.length) $('#audit-list').textContent = 'No activity recorded yet.';
-  $('#audit-page').textContent = 'Page ' + data.page;
-  $('#audit-previous').disabled = data.page <= 1;
-  $('#audit-next').disabled = !data.hasMore;
+  const list = $('#audit-list');
+  const apply = $('#audit-filter-form [type="submit"]');
+  list.setAttribute('aria-busy', 'true');
+  $('#audit-result-count').textContent = 'Loading activity…';
+  $('#audit-previous').disabled = true;
+  $('#audit-next').disabled = true;
+  apply.disabled = true;
+  try {
+    const data = await adminApi('/audit?' + new URLSearchParams({ page, ...auditFilters }));
+    if (version !== auditVersion) return;
+    auditPage = data.page;
+    auditHasMore = data.hasMore;
+    list.replaceChildren(...data.items.map(activityEntry));
+    if (!data.items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'audit-empty';
+      empty.innerHTML = '<strong></strong><p></p>';
+      empty.querySelector('strong').textContent = auditFilters.query || auditFilters.role ? 'No matching activity' : 'No activity recorded yet';
+      empty.querySelector('p').textContent = auditFilters.query || auditFilters.role ? 'Try a different search or clear the filters.' : 'Clinic changes will appear here when actions are recorded.';
+      list.append(empty);
+    }
+    $('#audit-result-count').textContent = `${data.items.length} ${data.items.length === 1 ? 'entry' : 'entries'} on this page`;
+    $('#audit-page').textContent = 'Page ' + data.page;
+  } catch (error) {
+    if (version === auditVersion) {
+      $('#audit-result-count').textContent = 'Activity could not refresh. Select Refresh to retry.';
+      throw error;
+    }
+  } finally {
+    if (version === auditVersion) {
+      list.setAttribute('aria-busy', 'false');
+      apply.disabled = false;
+      $('#audit-previous').disabled = auditPage <= 1;
+      $('#audit-next').disabled = !auditHasMore;
+    }
+  }
 }
 
 async function loadPatients() {
@@ -437,8 +483,13 @@ async function showPanel() {
 window.addEventListener('hashchange', () => run(showPanel));
 $('#refresh-overview').addEventListener('click', () => run(loadOverview));
 $('#refresh-staff').addEventListener('click', () => run(loadStaff));
-$('#refresh-audit').addEventListener('click', () => run(() => loadAudit()));
-$('#audit-filter-form').addEventListener('submit', event => { event.preventDefault(); run(() => loadAudit(1)); });
+$('#refresh-audit').addEventListener('click', () => run(() => loadAudit(auditPage)));
+function applyAuditFilters() {
+  auditFilters = Object.fromEntries(new FormData($('#audit-filter-form')));
+  run(() => loadAudit(1));
+}
+$('#audit-filter-form').addEventListener('submit', event => { event.preventDefault(); applyAuditFilters(); });
+$('#clear-audit-filters').addEventListener('click', () => { $('#audit-filter-form').reset(); applyAuditFilters(); });
 $('#audit-previous').addEventListener('click', () => run(() => loadAudit(auditPage - 1)));
 $('#audit-next').addEventListener('click', () => run(() => loadAudit(auditPage + 1)));
 $('#logout-button').addEventListener('click', () => run(async () => {

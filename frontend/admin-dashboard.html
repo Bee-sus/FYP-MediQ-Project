@@ -20,11 +20,14 @@
     <div class="staff-layout">
       <nav class="staff-nav" aria-label="Administrator portal">
         <a href="#overview"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#overview"></use></svg>Overview</a>
+        <span class="admin-nav-section" aria-hidden="true">Accounts</span>
         <a href="#staff"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#staff"></use></svg>Staff accounts</a>
+        <a href="#patients"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#patients"></use></svg>Patient accounts</a>
+        <span class="admin-nav-section" aria-hidden="true">Clinic setup</span>
         <a href="#services"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#services"></use></svg>Clinic services</a>
         <a href="#hours"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#hours"></use></svg>Operating hours</a>
-        <a href="#patients"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#patients"></use></svg>Patients</a>
         <a href="#settings"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#settings"></use></svg>Clinic settings</a>
+        <span class="admin-nav-section" aria-hidden="true">Monitoring</span>
         <a href="#activity"><svg class="portal-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#activity"></use></svg>Activity log</a>
       </nav>
       <main class="staff-main">
@@ -69,9 +72,13 @@
         </section>
         <section data-panel="activity" aria-labelledby="activity-heading" hidden>
           <div class="staff-section-heading"><div><h2 id="activity-heading">Activity log</h2><p>Administrator changes and Staff queue and appointment actions.</p></div><button id="refresh-audit" class="staff-secondary-button" type="button">Refresh</button></div>
-          <form id="audit-filter-form" class="audit-filters"><label>Actor<select name="role"><option value="">All roles</option><option value="Administrator">Administrator</option><option value="Staff">Staff</option></select></label><label>Search activity<input name="query" maxlength="80" placeholder="Name, action or details" /></label><button class="staff-secondary-button" type="submit">Apply filters</button></form>
-          <div id="audit-list" class="admin-list" aria-live="polite"></div>
-          <div class="admin-pagination"><button id="audit-previous" class="staff-secondary-button" type="button">Previous</button><span id="audit-page"></span><button id="audit-next" class="staff-secondary-button" type="button">Next</button></div>
+          <form id="audit-filter-form" class="audit-filters activity-filter-panel">
+            <div class="activity-filter-heading"><div><strong>Filter activity</strong><span>Find changes made by administrators and staff.</span></div><button id="clear-audit-filters" class="activity-filter-reset" type="button">Clear filters</button></div>
+            <div class="activity-filter-fields"><label>Search activity<input name="query" type="search" maxlength="80" placeholder="Name, action or details" /></label><label>Performed by<select name="role"><option value="">All roles</option><option value="Administrator">Administrator</option><option value="Staff">Staff</option></select></label><button class="staff-primary-button portal-action" data-tone="primary" type="submit">Apply filters</button></div>
+          </form>
+          <div class="audit-results-heading"><p id="audit-result-count" role="status" aria-live="polite"></p><span>Times shown in Malaysia time</span></div>
+          <div id="audit-list" class="admin-list audit-list" aria-busy="false"></div>
+          <div class="admin-pagination"><button id="audit-previous" class="staff-secondary-button" type="button" disabled>Previous</button><span id="audit-page"></span><button id="audit-next" class="staff-secondary-button" type="button" disabled>Next</button></div>
         </section>
         <section data-panel="patients" aria-labelledby="patients-heading" hidden>
           <div class="staff-section-heading"><div><h2 id="patients-heading">Patient accounts</h2><p>Review visit history, update contact details and manage account access.</p></div><button id="refresh-patients" class="staff-secondary-button" type="button">Refresh</button></div>

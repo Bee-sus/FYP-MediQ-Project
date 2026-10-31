@@ -237,9 +237,13 @@ function renderVisitReview(report) {
  const heading=document.createElement('summary');heading.textContent='Visit review';section.append(heading);
  const note=document.createElement('p');note.textContent='Automatic filtering: '+report.quality.includedVisits+' of '+report.quality.totalVisits+' visits included; '+report.quality.excludedUnusual+' excluded for invalid or unusually long durations. Limits: wait '+report.quality.waitReviewMinutes+' minutes; consultation '+report.quality.consultationReviewMinutes+' minutes. Open visits are not treated as completed durations. Showing latest '+report.visits.length+' of '+report.detailTotal+' records. Original timestamps remain unchanged.';section.append(note);
  const wrap=document.createElement('div');wrap.className='report-table-wrap';
+ const empty=document.createElement('p');empty.className='review-empty';empty.hidden=true;empty.textContent='No matching visits. Clear your filters to see all records.';
  const table=document.createElement('table');table.className='report-table review-visits-table';table.innerHTML='<thead><tr><th scope="col">Visit</th><th scope="col">Status</th><th scope="col">Wait</th><th scope="col">Statistics</th><th scope="col"><span class="review-sr-only">Visit details</span></th></tr></thead><tbody></tbody>';
  const filters=document.createElement('div'); filters.className='review-filters';
- filters.innerHTML='<div class="review-main-filters"><label>Find a visit<input data-review="search" type="search" placeholder="Search ticket or service…" /></label><label>Status<select data-review="status"><option value="">All statuses</option><option value="waiting">Waiting</option><option value="called">Called</option><option value="in_progress">In consultation</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_present">Not present</option></select></label><details class="review-more-filters"><summary>More filters<span data-active-filter-count></span></summary><div class="review-extra-filters"><label>Statistics<select data-review="inclusion"><option value="">All records</option><option value="included">Included</option><option value="excluded">Excluded</option></select></label><label>Review flags<select data-review="flags"><option value="">All records</option><option value="flagged">Needs review</option><option value="clear">No flags</option></select></label></div></details></div>';
+ filters.innerHTML='<div class="review-main-filters"><label>Find a visit<input data-review="search" type="search" placeholder="Search ticket or service…" /></label><label>Status<select data-review="status"><option value="">All statuses</option><option value="waiting">Waiting</option><option value="called">Called</option><option value="in_progress">In consultation</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_present">Not present</option></select></label><button type="button" class="review-more-filters" aria-expanded="false" aria-controls="review-extra-filters"><span>More filters<span data-active-filter-count></span></span></button></div><div id="review-extra-filters" class="review-extra-filters" hidden><label>Statistics<select data-review="inclusion"><option value="">All records</option><option value="included">Included</option><option value="excluded">Excluded</option></select></label><label>Review flags<select data-review="flags"><option value="">All records</option><option value="flagged">Needs review</option><option value="clear">No flags</option></select></label></div>';
+ const moreFilters=filters.querySelector('.review-more-filters');
+ const extraFilters=filters.querySelector('.review-extra-filters');
+ moreFilters.addEventListener('click',()=>{extraFilters.hidden=!extraFilters.hidden;moreFilters.setAttribute('aria-expanded',String(!extraFilters.hidden));});
  section.append(filters);
  const pager=document.createElement('div');pager.className='review-pager';pager.innerHTML='<button type="button" class="staff-secondary-button" data-prev>Previous</button><span role="status" aria-live="polite"></span><button type="button" class="staff-secondary-button" data-next>Next</button>';
  const toolbar=document.createElement('div');toolbar.className='review-toolbar';
@@ -286,7 +290,7 @@ function renderVisitReview(report) {
   button.onclick=()=>{detailRow.hidden=!detailRow.hidden;button.setAttribute('aria-expanded',String(!detailRow.hidden));button.textContent=detailRow.hidden?'Details':'Close';};
   table.querySelector('tbody').append(row,detailRow);
  }
- if(!data.total){const row=table.querySelector('tbody').insertRow();const cell=row.insertCell();cell.colSpan=5;cell.textContent='No matching visits. Clear your filters to see all records.';}
+ wrap.hidden=!data.total;empty.hidden=Boolean(data.total);
  toolbar.querySelector('.review-record-count').textContent=`${data.total} visit${data.total===1?'':'s'}${active?' match your filters':''}`;
  pager.querySelector('span').textContent=`Page ${page} of ${data.pages}`;
  pager.querySelector('[data-prev]').disabled=page===1;pager.querySelector('[data-next]').disabled=page===data.pages;
@@ -302,7 +306,7 @@ function renderVisitReview(report) {
  };
  pager.querySelector('[data-prev]').onclick=()=>{page=Math.max(1,page-1);draw();};pager.querySelector('[data-next]').onclick=event=>{if(event.currentTarget.textContent==='Retry')event.currentTarget.textContent='Next';else page++;draw();};
  note.className='review-intro';note.textContent=`${report.quality.includedVisits} of ${report.quality.totalVisits} visits included in statistics. Open Details to see timings and review notes.`;
- wrap.append(table);section.append(wrap,pager);
+ wrap.append(table);section.append(wrap,empty,pager);
  section.addEventListener('toggle',()=>{if(section.open&&!section.dataset.loaded){section.dataset.loaded='true';draw();}});
  return section;
 }

@@ -11,8 +11,10 @@ let previousQueueEntries = null;
 function visibleQueueEntry(entry) {
   return window.matchesQueueFilter ? window.matchesQueueFilter(entry, document.querySelector('#queue-search')?.value, document.querySelector('#queue-filter')?.value) : matchesQueueFilter(entry, document.querySelector('#queue-search')?.value, document.querySelector('#queue-filter')?.value);
 }
-function renderQueueSnapshot() {
+function renderQueueSnapshot(force = false) {
   if (!queueSnapshot) return;
+  // Polling must not remove an open menu or a button being used with the keyboard.
+  if (force !== true && (document.querySelector('.queue-more-actions:popover-open') || document.activeElement?.closest('#service-queues .queue-actions'))) return;
   document.querySelector('#service-queues').replaceChildren(...queueSnapshot.services.map(service => servicePanel(service, queueSnapshot.entries.filter(entry => Number(entry.serviceId) === Number(service.id)))));
   const count = queueSnapshot.entries.filter(visibleQueueEntry).length;
   document.querySelector('#queue-filter-count').textContent = count + ' matching entries';
@@ -149,6 +151,77 @@ function renderQueueReminders(entries) {
   banner.querySelector('span').textContent = 'Review the highlighted queue entries. Call patients when the clinician is ready.';
 }
 
+function addQueueMoreActions(actions, primary, entry) {
+  const secondary = [...actions.querySelectorAll('button')].filter(button => button !== primary);
+  if (!secondary.length) return;
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'staff-secondary-button queue-more';
+  trigger.innerHTML = '<span>More actions</span><span class="queue-more-chevron" aria-hidden="true"></span>';
+  trigger.setAttribute('aria-label', `More actions for ${formatQueueTicket(entry.serviceId, entry.queueNumber)}`);
+  trigger.setAttribute('aria-expanded', 'false');
+  const menu = document.createElement('div');
+  menu.id = `queue-more-${entry.id}`;
+  menu.className = 'queue-more-actions';
+  menu.setAttribute('popover', 'auto');
+  menu.setAttribute('role', 'group');
+  menu.setAttribute('aria-label', `Actions for ${entry.patientName}`);
+  trigger.setAttribute('aria-controls', menu.id);
+  trigger.popoverTargetElement = menu;
+  function positionMenu() {
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(228, window.innerWidth - 24);
+    const height = Math.min(menu.scrollHeight || secondary.length * 44 + 16, window.innerHeight - 24);
+    const below = rect.bottom + 8;
+    menu.style.width = `${width}px`;
+    menu.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
+    menu.style.top = `${Math.max(12, Math.min(below + height <= window.innerHeight - 12 ? below : rect.top - height - 8, window.innerHeight - height - 12))}px`;
+  }
+  menu.addEventListener('beforetoggle', event => {
+    trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
+    if (event.newState === 'open') {
+      positionMenu();
+      window.addEventListener('resize', positionMenu);
+      document.addEventListener('scroll', positionMenu, true);
+    } else {
+      window.removeEventListener('resize', positionMenu);
+      document.removeEventListener('scroll', positionMenu, true);
+    }
+  });
+  menu.addEventListener('toggle', event => {
+    if (event.newState === 'open') positionMenu();
+  });
+  trigger.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    if (!menu.matches(':popover-open')) menu.showPopover();
+    positionMenu();
+    secondary.find(button => !button.disabled)?.focus();
+  });
+  menu.addEventListener('keydown', event => {
+    const enabled = secondary.filter(button => !button.disabled);
+    const index = enabled.indexOf(document.activeElement);
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && enabled.length) {
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? enabled.length - 1
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + enabled.length) % enabled.length;
+      enabled[next].focus();
+    }
+    if (event.key === 'Escape') { event.preventDefault(); menu.hidePopover(); trigger.focus(); }
+  });
+  // Close before opening a confirmation, so cancelling returns focus to the trigger.
+  menu.addEventListener('click', event => {
+    if (!event.target.closest('button') || queueMutationPending) return;
+    menu.hidePopover();
+    trigger.focus();
+  }, true);
+  menu.addEventListener('focusout', event => {
+    if (event.relatedTarget && !menu.contains(event.relatedTarget) && event.relatedTarget !== trigger && menu.matches(':popover-open')) menu.hidePopover();
+  });
+  secondary.forEach(button => menu.append(button));
+  actions.append(trigger, menu);
+}
+
 function queueRow(entry, isFirstWaiting, hasWaiting, serviceName, canCall) {
   const row = document.createElement('article');
   const due = estimateReached(entry);
@@ -232,14 +305,7 @@ function queueRow(entry, isFirstWaiting, hasWaiting, serviceName, canCall) {
   });
   const primary = [...actions.querySelectorAll('[data-queue-action]')].find(button => !['cancelled', 'not_present'].includes(button.dataset.queueAction));
   if (primary) { primary.className = 'staff-primary-button'; primary.classList.add('queue-main-action'); }
-  const secondary = [...actions.querySelectorAll('button')].filter(button => button !== primary);
-  if (secondary.length) {
-    const more = document.createElement('details'); more.className = 'queue-more';
-    const summary = document.createElement('summary'); summary.textContent = 'More actions';
-    const menu = document.createElement('div'); menu.className = 'queue-more-actions';
-    secondary.forEach(button => { menu.append(button); });
-    more.append(summary, menu); actions.append(more);
-  }
+  addQueueMoreActions(actions, primary, entry);
   return row;
 }
 
@@ -364,7 +430,7 @@ async function loadStaffDashboard(afterMutation = false) {
       } catch (_) { /* Summary remains available if statistics cannot load. */ }
     }
     if (staffPage === 'queue') {
-      queueSnapshot = queueData; renderQueueSnapshot();
+      queueSnapshot = queueData; renderQueueSnapshot(afterMutation);
       if (previousQueueEntries) {
         const attention = queueData.entries.filter(entry => {
           const previous = previousQueueEntries.get(entry.id);
@@ -408,41 +474,84 @@ let appointmentLoadVersion = 0;
 let appointmentDecision = null;
 let slotLoadVersion = 0;
 let appointmentPage = 1;
+let appointmentDisplayedPage = 1;
+let appointmentHasMore = false;
 const appointmentLabels = { pending: 'Pending', approved: 'Approved', reschedule_proposed: 'Awaiting patient response', rejected: 'Rejected', cancelled: 'Cancelled', completed: 'Completed' };
 
 async function loadStaffAppointments() {
   const version = ++appointmentLoadVersion;
   const container = document.querySelector('#staff-appointments');
-  container.textContent = 'Loading appointments…';
+  const status = document.querySelector('#appointment-load-status');
+  const previous = document.querySelector('#appointment-previous');
+  const next = document.querySelector('#appointment-next');
+  container.setAttribute('aria-busy', 'true');
+  container.inert = true;
+  previous.disabled = true;
+  next.disabled = true;
+  status.textContent = 'Loading appointments…';
+  status.className = 'appointment-load-status';
+  status.setAttribute('role', 'status');
   try {
     const filters = new FormData(document.querySelector('#appointment-filters'));
     const data = await staffApi('/api/staff/appointments?' + new URLSearchParams({ status: filters.get('status'), search: filters.get('search'), from: filters.get('from'), to: filters.get('to'), page: appointmentPage }));
     if (version !== appointmentLoadVersion) return;
     container.replaceChildren(...data.appointments.map(staffAppointmentCard));
     if (!data.appointments.length) container.textContent = 'No appointments match this filter.';
+    appointmentPage = appointmentDisplayedPage = data.page;
+    appointmentHasMore = data.hasMore;
     document.querySelector('#appointment-page').textContent = `Page ${data.page}`;
-    document.querySelector('#appointment-previous').disabled = data.page <= 1;
-    document.querySelector('#appointment-next').disabled = !data.hasMore;
-  } catch (error) { if (version === appointmentLoadVersion) container.textContent = error.message; }
+    status.textContent = '';
+  } catch (error) {
+    if (version === appointmentLoadVersion) {
+      appointmentPage = appointmentDisplayedPage;
+      status.textContent = container.querySelector('.staff-appointment')
+        ? 'Appointments could not refresh. Previous results are still shown. Select Refresh to retry.'
+        : 'Appointments could not be loaded. Select Refresh to retry.';
+      status.className = 'appointment-load-status error';
+      status.setAttribute('role', 'alert');
+    }
+  } finally {
+    if (version === appointmentLoadVersion) {
+      container.setAttribute('aria-busy', 'false');
+      container.inert = false;
+      previous.disabled = appointmentDisplayedPage <= 1;
+      next.disabled = !appointmentHasMore;
+    }
+  }
 }
 
 function staffAppointmentCard(item) {
   const card = document.createElement('article');
   card.className = 'staff-appointment';
-  card.innerHTML = '<h3></h3><span class="staff-status"></span><p class="appointment-when"></p><p class="appointment-notes"></p><p class="appointment-response"></p><div class="queue-actions"></div>';
-  card.querySelector('h3').textContent = item.patientName + ' · ' + item.serviceName;
+  card.dataset.status = item.status;
+  card.innerHTML = '<header class="staff-appointment-header"><div class="appointment-date-tile" aria-hidden="true"><strong></strong><span></span></div><div class="staff-appointment-identity"><h3></h3><p class="appointment-service"></p></div><span class="staff-status"></span></header><div class="appointment-schedule"><div><span>Appointment date</span><strong class="appointment-when"></strong></div><div><span>Time slot</span><strong class="appointment-slot"></strong><small>Malaysia time</small></div></div><div class="appointment-note-block"><span>Patient notes</span><p class="appointment-notes"></p></div><div class="appointment-response" hidden><span>Clinic response</span><p></p></div><footer class="queue-actions appointment-decisions"></footer>';
+  const date = new Date(`${String(item.appointmentDate).slice(0, 10)}T00:00:00`);
+  const validDate = Number.isFinite(date.getTime());
+  card.querySelector('.appointment-date-tile strong').textContent = validDate ? String(date.getDate()).padStart(2, '0') : '—';
+  card.querySelector('.appointment-date-tile span').textContent = validDate ? new Intl.DateTimeFormat('en-MY', { month: 'short' }).format(date) : '';
+  card.querySelector('h3').textContent = item.patientName;
+  card.querySelector('.appointment-service').textContent = item.serviceName;
   card.querySelector('.staff-status').textContent = appointmentLabels[item.status];
   card.querySelector('.staff-status').dataset.status = item.status;
-  card.querySelector('.appointment-when').textContent = item.appointmentDate + ' · ' + formatTimeRange(item.appointmentTime) + ' (Malaysia time)';
-  card.querySelector('.appointment-notes').textContent = 'Patient notes: ' + (item.notes || 'None');
-  card.querySelector('.appointment-response').textContent = item.rejectionReason ? 'Clinic response: ' + item.rejectionReason : '';
-  const actions = item.status === 'pending' ? ['approve', 'reject', 'reschedule'] : item.status === 'approved' ? ['complete', 'reject', 'reschedule'] : item.status === 'reschedule_proposed' ? ['reject', 'reschedule'] : [];
+  card.querySelector('.appointment-when').textContent = validDate ? new Intl.DateTimeFormat('en-MY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(date) : 'Date unavailable';
+  card.querySelector('.appointment-slot').textContent = formatTimeRange(item.appointmentTime).replace(/ (AM|PM)/g, '\u00a0$1');
+  card.querySelector('.appointment-notes').textContent = item.notes || 'No notes provided.';
+  if (item.rejectionReason) {
+    card.querySelector('.appointment-response').hidden = false;
+    card.querySelector('.appointment-response p').textContent = item.rejectionReason;
+  }
+  const actions = item.status === 'pending' ? ['approve', 'reschedule', 'reject'] : item.status === 'approved' ? ['complete', 'reschedule', 'reject'] : item.status === 'reschedule_proposed' ? ['reschedule', 'reject'] : [];
   const labels = { approve: 'Approve', reject: 'Reject', reschedule: 'Propose new time', complete: 'Mark completed' };
+  if (!actions.length) card.querySelector('.appointment-decisions').hidden = true;
   actions.forEach(action => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'staff-secondary-button';
-    button.textContent = labels[action];
+    button.className = 'portal-action';
+    button.dataset.tone = action === 'reject' ? 'danger' : action === 'reschedule' ? 'secondary' : 'primary';
+    button.dataset.appointmentAction = action;
+    const icon = action === 'reject' ? 'action-close' : action === 'reschedule' ? 'appointments' : 'action-check';
+    button.innerHTML = `<svg class="portal-action-icon" aria-hidden="true" focusable="false"><use href="/portal-icons.svg#${icon}"></use></svg><span></span>`;
+    button.querySelector('span').textContent = labels[action];
     button.addEventListener('click', () => {
       appointmentDecision = { item, action };
       ++slotLoadVersion;
@@ -457,7 +566,11 @@ function staffAppointmentCard(item) {
       document.querySelector('#appointment-reason-label').hidden = !['reject', 'reschedule'].includes(action);
       document.querySelector('#appointment-reason').required = ['reject', 'reschedule'].includes(action);
       document.querySelector('#appointment-dialog-error').textContent = '';
-      document.querySelector('#appointment-dialog-submit').disabled = action === 'reschedule';
+      const submit = document.querySelector('#appointment-dialog-submit');
+      submit.textContent = labels[action];
+      submit.className = 'portal-action';
+      submit.dataset.tone = action === 'reject' ? 'danger' : 'primary';
+      submit.disabled = action === 'reschedule';
       document.querySelector('#appointment-dialog').showModal();
     });
     card.querySelector('.queue-actions').append(button);

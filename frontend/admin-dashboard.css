@@ -58,7 +58,16 @@
 .patient-history-columns section { padding: 18px; border-radius: 12px; background: var(--staff-bg); }
 .patient-history-columns h4 { margin: 0 0 12px; }
 .patient-history-columns p { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--staff-line); }
-#patient-search-form { grid-template-columns: minmax(260px, 1fr) auto; }
+#patient-search-form { display:grid;grid-template-columns:minmax(200px,1.5fr) repeat(3,minmax(0,1fr));gap:18px;padding:22px;margin-bottom:0;border:1px solid var(--staff-line);border-radius:16px;background:white; }
+#patient-search-form label { min-width:0;margin:0;font-size:.8rem; }
+#patient-search-form input, #patient-search-form select { width:100%;min-width:0;min-height:46px;padding:11px 12px;border:1px solid #d4cadd;border-radius:9px;background:white;color:var(--staff-ink);font:inherit; }
+.patient-filter-actions { grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--staff-line); }
+.patient-filter-actions button, .patient-account-actions button { min-height:42px; }
+.patient-result-count { min-height:1.5em;margin:18px 0;color:var(--staff-muted);font-size:.85rem;line-height:1.5; }
+#patient-list[aria-busy="true"] { opacity:.65; }
+.admin-body .staff-danger-button { min-height:42px;padding:10px 15px;border:1px solid #edb8bf;border-radius:10px;background:#fff;color:#a52638;font:inherit;font-size:.8rem;font-weight:750;cursor:pointer; }
+.admin-body .staff-danger-button:hover { border-color:#d47b88;background:#fff0f2; }
+.patient-account-actions .staff-danger-button:last-child { margin-left:auto; }
 @media (max-width: 1050px) { .admin-columns { grid-template-columns: 1fr; } .admin-body .staff-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .closure-form, .patient-history-columns { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .hours-times, .audit-filters { grid-template-columns: 1fr; } .admin-body .staff-summary-grid { grid-template-columns: 1fr; } .admin-card, .hours-day { padding: 18px; } }
@@ -104,3 +113,20 @@
 .patient-account-edit input { width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid var(--staff-line);border-radius:9px;font:inherit; }
 [data-panel="patients"] .admin-card-actions { justify-content:flex-start;flex-wrap:wrap; }
 @media(max-width:700px){.patient-account-edit{grid-template-columns:1fr;}}
+.patient-details-dialog { width:min(860px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100dvh - 40px);padding:0;overflow:hidden; }
+.patient-details-dialog[open] { display:flex;flex-direction:column; }
+.patient-history-header { display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-shrink:0;padding:24px 26px 20px;border-bottom:1px solid var(--staff-line);background:#fcf9ff; }
+.patient-history-header>div { min-width:0; }
+.patient-history-header .staff-eyebrow { margin:0 0 8px; }
+.patient-history-header h2 { margin:0;font-size:1.5rem;overflow-wrap:anywhere; }
+.patient-history-header .patient-contact { margin:8px 0 0;color:var(--staff-muted);font-size:.85rem;line-height:1.5;overflow-wrap:anywhere; }
+.patient-history-body { min-height:120px;overflow-y:auto;overscroll-behavior:contain;padding:0 26px 24px; }
+.patient-history-body .patient-account-edit { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.patient-history-body .patient-account-edit>button { justify-self:start; }
+.patient-history-body .patient-account-edit label { margin:0;min-width:0; }
+.patient-history-body .patient-history-columns { gap:16px; }
+.patient-history-body .patient-history-columns section { min-width:0; }
+.patient-history-body .patient-history-columns p { font-size:.85rem;line-height:1.6;overflow-wrap:anywhere; }
+.patient-history-footer { display:flex;justify-content:flex-end;flex-shrink:0;gap:10px;padding:16px 26px;border-top:1px solid var(--staff-line);background:white; }
+@media(max-width:1100px){#patient-search-form{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:600px){#patient-search-form{grid-template-columns:minmax(0,1fr);padding:18px;}.patient-filter-actions button{flex:1;}.patient-account-actions .staff-danger-button:last-child{margin-left:0;}.patient-history-header{padding:20px;gap:12px;}.patient-history-header h2{font-size:1.25rem;}.patient-history-body{padding:0 20px 20px;}.patient-history-body .patient-account-edit,.patient-history-body .patient-history-columns{grid-template-columns:minmax(0,1fr);}.patient-history-footer{padding:14px 20px;}}

@@ -165,13 +165,33 @@ async function loadHistoryPage(status = '', requestedPage = 1) {
   next.addEventListener('click', () => loadHistoryPage(status, data.page + 1));
 }
 
+let patientAppointmentItems = [];
+let patientAppointmentVersion = 0;
+
+function renderPatientAppointments() {
+  const list = document.querySelector('#appointment-list');
+  const filter = document.querySelector('#patient-appointment-filter').value;
+  const items = filter ? patientAppointmentItems.filter(item => item.status === filter) : patientAppointmentItems;
+  document.querySelector('#appointment-count').textContent = `${items.length} of ${patientAppointmentItems.length} appointment${patientAppointmentItems.length === 1 ? '' : 's'}`;
+  if (items.length) list.replaceChildren(...items.map(appointmentCard));
+  else list.innerHTML = '<div class="feature-empty"><strong>No matching appointments</strong><p>Choose another status to review your appointment activity.</p></div>';
+}
+
+async function refreshPatientAppointments() {
+  const version = ++patientAppointmentVersion;
+  const data = await api('/api/patient/appointments');
+  if (version !== patientAppointmentVersion) return;
+  patientAppointmentItems = data.appointments;
+  renderPatientAppointments();
+}
+
 function appointmentCard(item) {
   const card = document.createElement('article');
   card.className = 'appointment-card';
   card.innerHTML = `
     <div class="appointment-date"><strong></strong><span></span></div>
     <div class="appointment-details"><div><h2></h2><span class="record-status"></span></div><p class="appointment-time"></p><p class="appointment-notes"></p><p class="rejection-reason" hidden></p></div>
-    <button class="cancel-appointment" type="button">Cancel</button>
+    <button class="cancel-appointment portal-action" data-tone="danger" type="button">Cancel</button>
   `;
   const date = new Date(`${String(item.appointmentDate).slice(0, 10)}T00:00:00`);
   card.querySelector('.appointment-date strong').textContent = String(date.getDate()).padStart(2, '0');
@@ -196,7 +216,7 @@ function appointmentCard(item) {
     try {
       const result = await api(`/api/patient/appointments/${item.id}/cancel`, { method: 'POST' });
       showAlert(result.message);
-      await loadAppointmentsPage();
+      await refreshPatientAppointments();
     } catch (error) { showAlert(error.message, 'error'); }
     finally { cancel.disabled = false; cancel.textContent = 'Cancel appointment'; }
   });
@@ -209,7 +229,8 @@ function appointmentCard(item) {
     ['accept', 'decline'].forEach(decision => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'cancel-appointment';
+      button.className = 'cancel-appointment portal-action';
+      button.dataset.tone = decision === 'accept' ? 'primary' : 'danger';
       button.textContent = decision === 'accept' ? 'Accept new time' : 'Decline and cancel';
       button.addEventListener('click', async () => {
         if (!(await window.mediqDialog({ title: decision === 'accept' ? 'Accept proposed time?' : 'Decline proposed time?', message: decision === 'accept' ? 'Confirm this proposed appointment time?' : 'Decline this time and cancel the appointment?', confirmLabel: decision === 'accept' ? 'Accept new time' : 'Decline and cancel', danger: decision === 'decline' }))) return;
@@ -220,7 +241,7 @@ function appointmentCard(item) {
             body: JSON.stringify({ decision, appointmentDate: item.appointmentDate, appointmentTime: item.appointmentTime }),
           });
           showAlert(result.message);
-          await loadAppointmentsPage();
+          await refreshPatientAppointments();
         } catch (error) { showAlert(error.message, 'error'); }
         finally { actions.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
       });
@@ -268,16 +289,9 @@ async function loadAppointmentsPage() {
       submit.disabled = !data.slots.length;
     } catch (error) { if (current === version) showAlert(error.message, 'error'); }
   });
-  const list = document.querySelector('#appointment-list');
-  const renderAppointments = () => {
-    const filter = document.querySelector('#patient-appointment-filter').value;
-    const items = filter ? appointmentData.appointments.filter(item => item.status === filter) : appointmentData.appointments;
-    document.querySelector('#appointment-count').textContent = `${items.length} of ${appointmentData.appointments.length} appointment${appointmentData.appointments.length === 1 ? '' : 's'}`;
-    if (items.length) list.replaceChildren(...items.map(appointmentCard));
-    else list.innerHTML = '<div class="feature-empty"><strong>No matching appointments</strong><p>Choose another status to review your appointment activity.</p></div>';
-  };
-  document.querySelector('#patient-appointment-filter').addEventListener('change', renderAppointments);
-  renderAppointments();
+  patientAppointmentItems = appointmentData.appointments;
+  document.querySelector('#patient-appointment-filter').addEventListener('change', renderPatientAppointments);
+  renderPatientAppointments();
   document.querySelector('#appointment-form').addEventListener('submit', submitAppointment);
 }
 
@@ -291,12 +305,17 @@ async function submitAppointment(event) {
   try {
     const result = await api('/api/patient/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     showAlert(result.message);
-    await loadAppointmentsPage();
+    form.reset();
+    form.elements.serviceId.value = payload.serviceId;
+    form.elements.appointmentTime.replaceChildren(new Option('Select a date first', ''));
+    form.elements.appointmentTime.disabled = true;
+    status.hidden = true;
+    await refreshPatientAppointments();
   } catch (error) {
     status.textContent = error.message;
     status.className = 'inline-status error';
     status.hidden = false;
-  } finally { button.disabled = false; }
+  } finally { button.disabled = form.elements.appointmentTime.disabled; }
 }
 
 function notificationCard(item) {

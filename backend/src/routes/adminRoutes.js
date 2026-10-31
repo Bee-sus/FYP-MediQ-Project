@@ -128,12 +128,34 @@ router.get('/services', async (request, response) => {
 });
 
 router.get('/patients', async (request, response) => {
-  const query = String(request.query.query || '').trim().slice(0, 80); const page = Math.max(1, Number(request.query.page) || 1); const offset = (page - 1) * 20;
+  const query = String(request.query.query || '').trim().slice(0, 80);
+  const status = String(request.query.status || '');
+  const verification = String(request.query.verification || '');
+  const sort = String(request.query.sort || 'name_asc');
+  const requestedPage = Number(request.query.page || 1);
+  const orders = { name_asc: 'full_name ASC, id ASC', name_desc: 'full_name DESC, id DESC', newest: 'created_at DESC, id DESC', oldest: 'created_at ASC, id ASC' };
+  if (!['', 'active', 'inactive'].includes(status) || !['', 'verified', 'pending'].includes(verification)
+      || !Object.hasOwn(orders, sort) || !Number.isSafeInteger(requestedPage) || requestedPage < 1) {
+    return response.status(422).json({ error: 'Choose valid patient filters and a page number.' });
+  }
+  const conditions = ["role = 'patient'", 'deleted_at IS NULL'];
+  const values = [];
+  if (query) {
+    const search = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+    conditions.push('(full_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)');
+    values.push(search, search, search);
+  }
+  if (status) conditions.push(status === 'active' ? 'is_active = TRUE' : 'is_active = FALSE');
+  if (verification) conditions.push(verification === 'verified' ? 'email_verified_at IS NOT NULL' : 'email_verified_at IS NULL');
+  const where = conditions.join(' AND ');
   try {
+    const [[count]] = await pool.execute(`SELECT COUNT(*) AS total FROM users WHERE ${where}`, values);
+    const total = Number(count.total);
+    const pages = Math.max(1, Math.ceil(total / 20));
+    const page = Math.min(requestedPage, pages);
     const [patients] = await pool.execute(`SELECT id, full_name AS fullName, email, phone_number AS phone, is_active AS isActive, email_verified_at AS verifiedAt, created_at AS createdAt
-      FROM users WHERE role = 'patient' AND deleted_at IS NULL AND (? = '' OR full_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)
-      ORDER BY full_name LIMIT 21 OFFSET ${offset}`, [query, `%${query}%`, `%${query}%`, `%${query}%`]);
-    return response.json({ patients: patients.slice(0, 20), page, hasMore: patients.length > 20 });
+      FROM users WHERE ${where} ORDER BY ${orders[sort]} LIMIT 20 OFFSET ${(page - 1) * 20}`, values);
+    return response.json({ patients, total, pages, page, pageSize: 20, hasMore: page < pages });
   } catch (error) { return response.status(503).json({ error: 'Patient records are unavailable.' }); }
 });
 

@@ -210,6 +210,9 @@
 }
 
 #staff-appointments { display: grid; gap: 16px; }
+#staff-appointments[aria-busy="true"] { opacity: .65; }
+.appointment-load-status { min-height: 1.5em; margin: 0 0 16px; color: var(--staff-muted); font-size: .85rem; line-height: 1.5; }
+.appointment-load-status.error { color: #a02c23; }
 .staff-appointment { background: white; border: 1px solid #dce5e3; border-radius: 16px; padding: 24px; overflow-wrap: anywhere; }
 .staff-appointment h3 { margin: 0 0 10px; }
 .staff-appointment p { margin: 8px 0; }
@@ -335,13 +338,20 @@
 .review-reset { border:0;background:transparent;padding:8px;color:var(--staff-accent);font:inherit;font-size:.82rem;font-weight:650;cursor:pointer; }
 .review-reset:hover { text-decoration:underline; }
 .visit-review .review-filters { display:block;margin:0 0 22px;padding:18px;background:#f6f9fa;border:1px solid var(--staff-line);border-radius:12px; }
-.review-main-filters { display:grid;grid-template-columns:minmax(180px,1fr) minmax(150px,220px) 135px;gap:14px;align-items:end; }
+.review-main-filters { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,220px) 135px;gap:14px;align-items:end; }
 .review-main-filters label { font-size:.8rem;font-weight:650; }
-.review-more-filters { align-self:end; }
-.review-more-filters>summary { min-height:44px;padding:12px;border:1px solid var(--staff-line);border-radius:9px;background:white;cursor:pointer;color:var(--staff-ink);font-size:.82rem;font-weight:650; }
-.review-more-filters[open] { grid-column:1/-1; }
-.review-more-filters[open]>summary { display:inline-block;min-width:135px; }
+.review-main-filters label, .review-extra-filters label { min-width:0; }
+.review-filters input, .review-filters select { min-width:0; }
+.review-more-filters { display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:12px;border:1px solid var(--staff-line);border-radius:9px;background:white;cursor:pointer;color:var(--staff-ink);font:inherit;font-size:.82rem;font-weight:650; }
+.review-more-filters::after { content:'';flex:0 0 6px;width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-2px) rotate(45deg); }
+.review-more-filters[aria-expanded="true"] { border-color:var(--staff-accent);color:var(--staff-accent-dark); }
+.review-more-filters[aria-expanded="true"]::after { transform:translateY(2px) rotate(225deg); }
+.review-more-filters:focus-visible { outline:3px solid #89cfc5;outline-offset:2px; }
 .review-extra-filters { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--staff-line); }
+.review-extra-filters[hidden] { display:none!important; }
+.visit-review .report-table-wrap { position:relative;min-width:0;max-width:100%; }
+.visit-review .report-table-wrap[hidden], .review-empty[hidden] { display:none!important; }
+.review-empty { margin:0;padding:18px 16px;border:1px solid var(--staff-line);border-radius:9px;color:var(--staff-muted);font-size:.85rem;line-height:1.6; }
 .review-visits-table { min-width:600px;table-layout:fixed; }
 .review-visits-table th:nth-child(1) { width:34%; }
 .review-visits-table th:nth-child(2) { width:21%; }
@@ -367,4 +377,5 @@
 .visit-review .review-pager { justify-content:flex-end;padding-top:18px;border-top:1px solid var(--staff-line);margin-top:0;font-size:.8rem; }
 .review-page-size { display:flex;align-items:center;gap:8px;margin-right:auto;color:var(--staff-muted); }
 .review-sr-only { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap; }
-@media(max-width:700px){.review-main-filters{grid-template-columns:1fr 1fr;}.review-main-filters>label:first-child{grid-column:1/-1;}.review-extra-filters{grid-template-columns:1fr;}.review-detail-row dl{grid-template-columns:1fr 1fr;}.review-toolbar>[data-export]{margin-left:auto;}}
+@media(max-width:1050px){.review-main-filters{grid-template-columns:minmax(0,1fr) 135px;}.review-main-filters>label:first-child{grid-column:1/-1;}.visit-review .review-pager{flex-wrap:wrap;}.review-page-size{flex-basis:100%;}.review-pager>span{flex:1;text-align:center;}}
+@media(max-width:700px){.review-extra-filters{grid-template-columns:1fr;}.review-detail-row dl{grid-template-columns:1fr 1fr;}.review-toolbar>[data-export]{margin-left:auto;}}

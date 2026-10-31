@@ -8,6 +8,15 @@ describe('system endpoints', () => {
     await pool.end();
   });
 
+  test.each(['get','post'])('missing API routes return JSON for %s requests',async method=>{
+    const response=await request(app)[method]('/api/unknown-feature');
+    expect(response.status).toBe(404);expect(response.headers['content-type']).toContain('application/json');expect(response.body.code).toBe('API_NOT_FOUND');
+  });
+  test('malformed JSON produces a readable API error',async()=>{
+    const response=await request(app).post('/api/auth/login').set('Content-Type','application/json').send('{broken');
+    expect(response.status).toBe(400);expect(response.body.error).toContain('could not be read');
+  });
+
   test('returns the current project milestone', async () => {
     const response = await request(app).get('/api/project-status');
 

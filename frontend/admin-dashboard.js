@@ -302,10 +302,12 @@ async function loadAudit(page = 1) {
 async function loadPatients() {
   const query = new FormData($('#patient-search-form')).get('query') || '';
   const data = await adminApi('/patients?query=' + encodeURIComponent(query)+'&page='+patientPage);
+  if(!data.patients.length&&patientPage>1){patientPage--;return loadPatients();}
   $('#patient-page').textContent='Page '+data.page;$('#patient-previous').disabled=data.page<=1;$('#patient-next').disabled=!data.hasMore;
   $('#patient-details').replaceChildren();
   $('#patient-list').replaceChildren(...data.patients.map(patient => {
     const element = card(patient.fullName, `${patient.email} · ${patient.phone || 'No contact number'}`);
+    element.dataset.patientId=patient.id;
     const state=document.createElement('div');state.className='patient-account-state';state.append(badge(Boolean(patient.isActive)));const verified=document.createElement('span');verified.textContent=patient.verifiedAt?'Email verified':'Awaiting email verification';state.append(verified);element.querySelector('p').after(state);
     element.querySelector('.admin-card-actions').append(button('View history', () => loadPatientDetails(patient.id)));
     element.querySelector('.admin-card-actions').append(button(patient.isActive?'Deactivate':'Reactivate',async()=>{
@@ -328,7 +330,7 @@ async function loadPatientDetails(id) {
   panel.querySelector('.patient-contact').textContent = `${data.patient.email} · ${data.patient.phone || 'No contact number'}`;
   const edit=document.createElement('form');edit.className='patient-account-edit';edit.innerHTML='<h4>Account details</h4><label>Full name<input name="fullName" minlength="2" maxlength="120" required /></label><label>Contact number<input name="phone" type="tel" maxlength="30" required /></label><button type="submit" class="staff-primary-button">Save details</button><p role="status"></p>';
   edit.elements.fullName.value=data.patient.fullName;edit.elements.phone.value=data.patient.phone||'';
-  edit.onsubmit=async event=>{event.preventDefault();const submit=edit.querySelector('button');submit.disabled=true;try{const result=await adminApi('/patients/'+id,json('PATCH',Object.fromEntries(new FormData(edit))));edit.querySelector('p').textContent=result.message;panel.querySelector('h3').textContent=edit.elements.fullName.value;panel.querySelector('.patient-contact').textContent=data.patient.email+' · '+edit.elements.phone.value;loaded.delete('patients');}catch(error){edit.querySelector('p').textContent=error.message;}finally{submit.disabled=false;}};
+  edit.onsubmit=async event=>{event.preventDefault();const submit=edit.querySelector('button');submit.disabled=true;try{const result=await adminApi('/patients/'+id,json('PATCH',Object.fromEntries(new FormData(edit))));edit.querySelector('p').textContent=result.message;panel.querySelector('h3').textContent=edit.elements.fullName.value.trim();panel.querySelector('.patient-contact').textContent=data.patient.email+' · '+edit.elements.phone.value.trim();const listing=$('#patient-list').querySelector(`[data-patient-id="${id}"]`);if(listing){listing.querySelector('h3').textContent=edit.elements.fullName.value.trim();listing.querySelector('p').textContent=data.patient.email+' · '+edit.elements.phone.value.trim();}loaded.delete('patients');}catch(error){edit.querySelector('p').textContent=error.message;}finally{submit.disabled=false;}};
   panel.querySelector('.patient-history-columns').before(edit);
   const makeRows = items => items.map(item => { const row = document.createElement('p'); row.textContent = `${String(item.queueDate || item.appointmentDate).slice(0, 10)} · ${item.serviceName} · ${item.status}`; return row; });
   panel.querySelector('.queue-history-list').replaceChildren(...makeRows(data.queues));

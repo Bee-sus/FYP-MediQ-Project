@@ -140,3 +140,10 @@ body.verify-body .verify-page { width:min(100%,580px);margin:0 auto; }
 .patient-otp-dialog button:disabled { opacity:.65;cursor:wait; }
 .patient-otp-dialog :is(button,a):focus-visible { outline:3px solid #a8c3ff;outline-offset:3px; }
 @media(max-width:520px){.patient-otp-dialog{padding:32px 22px;}.verify-body .verify-card{padding:30px 24px;}}
+.otp-restart { display:block;margin-top:16px;color:var(--blue-dark);font-size:.85rem;font-weight:700; }
+.signin-help { position:relative; }
+.signin-help summary { cursor:pointer; }
+.signin-help>div { position:absolute;right:0;top:calc(100% + 12px);z-index:10;width:min(290px,75vw);padding:18px;border:1px solid var(--line);border-radius:12px;background:white;box-shadow:0 12px 35px #14213d22;color:var(--ink);font-size:.8rem;line-height:1.6; }
+.signin-help p { margin:8px 0; }
+.signin-help a { color:var(--blue-dark);font-weight:700; }
+.signin-help [hidden] { display:none; }

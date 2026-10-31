@@ -15,7 +15,7 @@ This repository contains the working Patient portal and Staff operations for Med
 - Homepage feature set based on the approved FYP prototype
 - Clearly separated Patient, Staff and Administrator access with three sign-in pages
 - Public patient registration only; Staff and Administrator accounts are clinic-issued
-- Email verification for new Patient and Staff accounts, with a development link when SMTP is not configured
+- Patient registration OTP verification with resend and expiry feedback; Staff verification uses email links
 - Accessible live registration validation and strong-password guidance
 - MySQL-backed patient registration, password hashing and secure role-aware sessions
 - Protected Patient, Staff and Administrator dashboard entry
@@ -46,6 +46,8 @@ This repository contains the working Patient portal and Staff operations for Med
 - Automated tests for public pages, authentication, ownership and Patient workflows
 
 ## Project structure
+
+Commit the application source, database migrations, dependency lockfiles, documentation and the pinned ML model plus its integrity manifest. Keep `.env`, `node_modules`, Python virtual environments, test caches and generated files out of Git. `.gitignore` excludes `/tmp/` and `/output/`; PDF previews can be recreated with `node scripts/preview-staff-report.js`. Use `.env.example` to document configuration without including real credentials. Generated caches can be deleted safely and will be recreated when needed.
 
 ```text
 backend/       Node.js and Express application

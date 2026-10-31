@@ -29,10 +29,15 @@ app.use('/api/staff', require('./routes/serviceNoticeRoutes'));
 app.use('/api/staff', staffRoutes);
 app.use('/api/staff', appointmentRoutes.staff);
 app.use('/api/admin', adminRoutes);
+app.use('/api', (request, response) => response.status(404).json({
+  error: 'This feature is not available on the server. Refresh the page or restart the application.',
+  code: 'API_NOT_FOUND',
+}));
 app.use('/api', (error, request, response, next) => {
   if (error?.type === 'entity.too.large') return response.status(413).json({ error: 'The selected image is too large. Choose a smaller picture and try again.' });
   if (error instanceof SyntaxError && error.status === 400) return response.status(400).json({ error: 'The submitted information could not be read. Refresh and try again.' });
-  return next(error);
+  console.error('API request failed:', error.code || error.name || 'UNKNOWN_ERROR');
+  return response.status(500).json({ error: 'The request could not be completed. Please try again.' });
 });
 app.use(express.static(frontendDirectory));
 

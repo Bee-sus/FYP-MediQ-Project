@@ -17,10 +17,10 @@ async function withVerification(request,response,work){
    (p.expires_at > NOW()) AS codeValid
    FROM patient_email_codes p JOIN users u ON u.id=p.user_id
    WHERE p.session_hash=? AND p.session_expires_at>NOW() AND u.role='patient' AND u.is_active=TRUE FOR UPDATE`,[hashToken(session)]);
-  if(!rows.length||rows[0].verifiedAt)throw problem(410,'Verification session expired or already used. Sign in to continue.');
+  if(!rows.length||rows[0].verifiedAt)throw Object.assign(problem(410,'Verification session expired or already used. Sign in to continue.'),{publicCode:'VERIFICATION_SESSION_EXPIRED'});
   const result=await work(connection,rows[0],session);
   await connection.commit();return response.status(result.status||200).json(result.body);
- }catch(error){if(connection)await connection.rollback();return response.status(error.status||503).json({error:error.status?error.message:'Email verification is temporarily unavailable. Please retry.'});}
+ }catch(error){if(connection)await connection.rollback();return response.status(error.status||503).json({error:error.status?error.message:'Email verification is temporarily unavailable. Please retry.',...(error.publicCode?{code:error.publicCode}:{})});}
  finally{if(connection)connection.release();}
 }
 router.post('/request-email-code',(request,response)=>withVerification(request,response,async(connection,row,session)=>{

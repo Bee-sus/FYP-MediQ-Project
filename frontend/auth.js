@@ -1,4 +1,8 @@
-fetch('/api/settings').then(response => response.json()).then(data => document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; })).catch(() => {});
+fetch('/api/settings').then(response => response.json()).then(data => {
+ document.querySelectorAll('.brand small').forEach(item => { item.textContent = data.settings.clinicName; });
+ const phone=String(data.settings.phone||'').trim(),digits=phone.replace(/\D/g,'');
+ if(digits.length>=7)document.querySelectorAll('[data-clinic-contact]').forEach(link=>{link.textContent='Call '+phone;link.href='tel:'+(phone.startsWith('+')?'+':'')+digits;link.hidden=false;});
+}).catch(() => {});
 const registrationMessages = {
   fullName: 'Enter your full name using at least 2 letters.', email: 'Enter a valid email address.',
   phone: 'Enter a valid phone number containing 8–15 digits.', birthDate: 'Enter a valid date of birth that is not in the future.',
@@ -57,6 +61,12 @@ function showServerFieldErrors(fields = {}) {
   });
 }
 
+async function readAuthResponse(response){
+ if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('The server returned an unexpected response. Refresh the page or restart MediQ and try again.');
+ try{return await response.json();}catch(_){throw new Error('The server response could not be read. Please try again.');}
+}
+function authFailure(error){return error instanceof TypeError?'Connection lost. The request was not confirmed. Check your connection and try again.':error.message;}
+
 async function submitAuthForm(form, status) {
   const values = Object.fromEntries(new FormData(form));
   const isRegistration = form.dataset.authForm === 'register';
@@ -64,7 +74,7 @@ async function submitAuthForm(form, status) {
   const payload = { ...values, terms: values.terms === 'on', remember: values.remember === 'on' };
   if (!isRegistration) payload.role = roles[form.dataset.authForm];
   const response = await fetch(`/api/auth/${isRegistration ? 'register' : 'login'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  const result = await response.json();
+  const result = await readAuthResponse(response);
   if(result.verificationMethod==='otp'&&result.verificationSession){status.hidden=true;openPatientVerification(result);return;}
   if (!response.ok) { showServerFieldErrors(result.fields); throw new Error(result.error || 'The request could not be completed.'); }
   status.textContent = result.message; status.className = 'form-status'; status.hidden = false;
@@ -103,44 +113,47 @@ function configureAuthForm() {
       if (firstInvalid) { status.textContent = 'Please correct the highlighted registration fields.'; status.className = 'form-status error'; status.hidden = false; firstInvalid.focus(); return; }
     }
     const button = form.querySelector('.submit-button'); button.disabled = true; status.textContent = 'Please wait…'; status.className = 'form-status'; status.hidden = false;
-    try { await submitAuthForm(form, status); } catch (error) { status.textContent = error.message; status.className = 'form-status error'; status.hidden = false; } finally { button.disabled = false; }
+    try { await submitAuthForm(form, status); } catch (error) { status.textContent = authFailure(error); status.className = 'form-status error'; status.hidden = false; } finally { button.disabled = false; }
   });
   form.querySelector('.resend-verification')?.addEventListener('click', async () => {
     const status = document.querySelector('#form-status'); const email = form.elements.email.value.trim();
     if (!email) { status.textContent = 'Enter your email address first.'; status.className = 'form-status error'; status.hidden = false; return; }
     const role = form.dataset.authForm === 'staff-login' ? 'staff' : 'patient';
-    try { const response = await fetch('/api/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); status.textContent = result.message; status.className = 'form-status'; status.hidden = false; if (result.verificationPreviewUrl) { const link = document.createElement('a'); link.href = result.verificationPreviewUrl; link.textContent = ' Open local verification link'; status.append(link); } }
-    catch (error) { status.textContent = error.message; status.className = 'form-status error'; status.hidden = false; }
+    try { const response = await fetch('/api/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role }) }); const result = await readAuthResponse(response); if (!response.ok) throw new Error(result.error); status.textContent = result.message; status.className = 'form-status'; status.hidden = false; if (result.verificationPreviewUrl) { const link = document.createElement('a'); link.href = result.verificationPreviewUrl; link.textContent = ' Open local verification link'; status.append(link); } }
+    catch (error) { status.textContent = authFailure(error); status.className = 'form-status error'; status.hidden = false; }
   });
 }
 
 let otpDialog,otpTimer;
 configureAuthForm();
 if(['register','patient-login'].includes(document.querySelector('[data-auth-form]')?.dataset.authForm)){
- try{const pending=JSON.parse(sessionStorage.getItem('mediq-pending-verification')||'null');if(pending?.verificationSession)openPatientVerification(pending);}catch(_){}
+ try{const pending=JSON.parse(sessionStorage.getItem('mediq-pending-verification')||'null');if(pending?.sessionExpiresAt&&pending.sessionExpiresAt<Date.now())sessionStorage.removeItem('mediq-pending-verification');else if(pending?.verificationSession)openPatientVerification(pending);}catch(_){}
 }
 
 function openPatientVerification(context){
  // Native dialog keeps focus inside the verification flow and supports Escape.
  if(otpDialog){clearInterval(otpTimer);otpDialog.remove();}
+ context.sessionExpiresAt ||= Date.now()+24*60*60*1000;
  try{sessionStorage.setItem('mediq-pending-verification',JSON.stringify(context));}catch(_){}
  otpDialog=document.createElement('dialog');otpDialog.className='patient-otp-dialog';otpDialog.setAttribute('aria-labelledby','otp-heading');
  otpDialog.innerHTML='<button type="button" class="otp-close" aria-label="Continue verification later">×</button><div class="otp-symbol" aria-hidden="true">@</div><p class="eyebrow">Finish registration</p><h2 id="otp-heading">Verify your email address</h2><p class="otp-description">We will send a six-digit code to <strong id="otp-email"></strong>.</p><button type="button" class="submit-button otp-send">Send verification code</button><form class="otp-code-form" hidden><label for="otp-code">Verification code</label><input id="otp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required /><small>The code expires in 10 minutes. Use the newest email.</small><button class="submit-button" type="submit">Verify email</button></form><p class="otp-result" role="status" aria-live="polite"></p><a class="submit-button otp-continue" href="/patient-login.html" hidden>Continue to sign in</a>';
  document.body.append(otpDialog);otpDialog.querySelector('#otp-email').textContent=context.verificationEmail||'your registered email';
  const send=otpDialog.querySelector('.otp-send'),form=otpDialog.querySelector('form'),result=otpDialog.querySelector('.otp-result'),input=form.elements.code;
- let busy=false,verified=false,deadline=Number(context.resendAt)||0;
- const update=()=>{const wait=Math.max(0,Math.ceil((deadline-Date.now())/1000));send.disabled=busy||wait>0;send.textContent=busy?'Sending…':wait?`Resend code in ${wait}s`:form.hidden?'Send verification code':'Resend code';};
+ const restart=document.createElement('a');restart.href='/patient-login.html';restart.className='otp-restart';restart.textContent='Sign in to restart verification';restart.hidden=true;otpDialog.append(restart);
+ let busy=false,verified=false,sessionExpired=false,deadline=Number(context.resendAt)||0;
+ const update=()=>{if(verified||sessionExpired)return;const wait=Math.max(0,Math.ceil((deadline-Date.now())/1000));send.disabled=busy||wait>0;send.textContent=busy?'Please wait…':wait?`Resend code in ${wait}s`:form.hidden?'Send verification code':'Resend code';const remaining=Math.max(0,Math.ceil(((Number(context.codeExpiresAt)||0)-Date.now())/1000));if(context.codeExpiresAt){form.querySelector('small').textContent=remaining?`Code expires in ${Math.floor(remaining/60)}m ${remaining%60}s. Use the newest email.`:'Code expired. Select Resend code to continue.';form.querySelector('button').disabled=busy||!remaining;}};
+ const displayFailure=error=>{result.textContent=authFailure(error);if(error.code==='VERIFICATION_SESSION_EXPIRED'){sessionExpired=true;clearInterval(otpTimer);form.hidden=true;send.hidden=true;restart.hidden=false;try{sessionStorage.removeItem('mediq-pending-verification');}catch(_){}}};
  const later=()=>{otpDialog.close();if(verified){window.location.assign('/patient-login.html');return;}const status=document.querySelector('#form-status');status.replaceChildren();status.className='form-status';status.hidden=false;const reopen=document.createElement('button');reopen.type='button';reopen.className='otp-resume';reopen.textContent='Continue email verification';reopen.onclick=()=>otpDialog.showModal();status.append(reopen);};
  otpDialog.querySelector('.otp-close').onclick=later;otpDialog.addEventListener('cancel',event=>{event.preventDefault();later();});
- const post=async(path,body)=>{const response=await fetch('/api/auth/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationSession:context.verificationSession,...body})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Please try again.');return data;};
+ const post=async(path,body)=>{const response=await fetch('/api/auth/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationSession:context.verificationSession,...body})});const data=await readAuthResponse(response);if(!response.ok)throw Object.assign(new Error(data.error||'Please try again.'),{code:data.code});return data;};
  send.onclick=async()=>{if(busy)return;busy=true;update();result.textContent='Sending your verification code…';form.querySelector('button').disabled=true;
-  try{const data=await post('request-email-code',{});deadline=Date.now()+data.resendAfter*1000;context.resendAt=deadline;try{sessionStorage.setItem('mediq-pending-verification',JSON.stringify(context));}catch(_){}form.hidden=false;input.value='';result.textContent=data.previewCode?`Local testing code: ${data.previewCode}`:data.message;input.focus();}
-  catch(error){result.textContent=error.message;}finally{busy=false;form.querySelector('button').disabled=false;update();}
+  try{const data=await post('request-email-code',{});deadline=Date.now()+data.resendAfter*1000;context.resendAt=deadline;context.codeExpiresAt=Date.now()+data.expiresIn*1000;try{sessionStorage.setItem('mediq-pending-verification',JSON.stringify(context));}catch(_){}form.hidden=false;input.value='';result.textContent=data.previewCode?`Local testing code: ${data.previewCode}`:data.message;input.focus();}
+  catch(error){displayFailure(error);}finally{busy=false;form.querySelector('button').disabled=false;update();}
  };
- form.onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;form.querySelector('button').disabled=true;send.disabled=true;result.textContent='Checking your code…';
+ form.onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;form.querySelector('button').disabled=true;form.querySelector('button').textContent='Verifying…';send.disabled=true;result.textContent='Checking your code…';
   try{const data=await post('verify-email-code',{code:input.value.trim()});verified=true;clearInterval(otpTimer);try{sessionStorage.removeItem('mediq-pending-verification');}catch(_){}form.hidden=true;send.hidden=true;otpDialog.querySelector('h2').textContent='Email verified';otpDialog.querySelector('.otp-description').textContent='Your Patient account is ready. You can now sign in.';result.textContent=data.message;otpDialog.querySelector('.otp-continue').hidden=false;}
-  catch(error){result.textContent=error.message;input.focus();}finally{busy=false;form.querySelector('button').disabled=false;if(!verified)update();}
+  catch(error){displayFailure(error);input.focus();}finally{busy=false;form.querySelector('button').textContent='Verify email';form.querySelector('button').disabled=false;if(!verified)update();}
  };
- if(deadline>Date.now()){form.hidden=false;result.textContent='Enter the latest code sent to your email.';}
+ if(context.codeExpiresAt||deadline>Date.now()){form.hidden=false;result.textContent='Enter the latest code sent to your email.';}
  update();otpTimer=setInterval(update,1000);otpDialog.showModal();
 }

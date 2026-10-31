@@ -8,6 +8,18 @@ describe('system endpoints', () => {
     await pool.end();
   });
 
+  test('a sign-out database failure returns a retryable error without clearing the session cookie', async () => {
+    const execute = jest.spyOn(pool, 'execute')
+      .mockResolvedValueOnce([[{ id: 1, role: 'patient' }]])
+      .mockRejectedValueOnce(new Error('Temporary database failure'));
+    try {
+      const response = await request(app).post('/api/auth/logout').set('Cookie', 'mediq_session=test');
+      expect(response.status).toBe(503);
+      expect(response.body.error).toContain('Sign-out could not be completed');
+      expect(response.headers['set-cookie']).toBeUndefined();
+    } finally { execute.mockRestore(); }
+  });
+
   test.each(['get','post'])('missing API routes return JSON for %s requests',async method=>{
     const response=await request(app)[method]('/api/unknown-feature');
     expect(response.status).toBe(404);expect(response.headers['content-type']).toContain('application/json');expect(response.body.code).toBe('API_NOT_FOUND');

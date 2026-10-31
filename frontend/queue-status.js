@@ -193,9 +193,8 @@ document.querySelector('#refresh-queue').addEventListener('click', () => loadQue
 document.querySelector('#cancel-dialog').addEventListener('cancel', event => { if (cancellationPending) event.preventDefault(); });
 document.querySelector('#keep-queue').addEventListener('click', () => document.querySelector('#cancel-dialog').close());
 document.querySelector('#cancel-form').addEventListener('submit', cancelQueue);
-document.querySelector('#logout-button').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
-  window.location.replace('/');
+document.querySelector('#logout-button').addEventListener('click', event => {
+  window.mediqSignOut(event.currentTarget);
 });
 loadQueueStatus();
 window.setInterval(() => {

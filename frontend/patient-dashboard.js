@@ -147,8 +147,7 @@ function renderNotifications(items, unreadCount) {
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-  window.location.replace('/');
+  await window.mediqSignOut(document.querySelector('#logout-button'));
 }
 
 async function loadPatientDashboard() {

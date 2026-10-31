@@ -111,6 +111,20 @@ footer a { color: var(--blue-dark); }
 }
 
 /* Keep action feedback visible while working further down a page. */
+.portal-feedback-copy { min-width:0; }
+#portal-feedback { position:fixed;top:94px;right:24px;z-index:100;display:flex;align-items:flex-start;gap:12px;width:min(420px,calc(100vw - 32px));padding:18px 16px 18px 20px;box-sizing:border-box;border:1px solid #c8e2d8;border-left:4px solid #138a5b;border-radius:14px;background:white;color:#14213d;box-shadow:0 12px 40px #14213d26;text-align:left;font-family:Inter,Arial,sans-serif; }
+#portal-feedback[hidden], #portal-feedback button[hidden] { display:none!important; }
+#portal-feedback[data-type="error"] { border-color:#efc4ca;border-left-color:#b42b3c; }
+#portal-feedback[data-type="warning"] { border-color:#ecd6a7;border-left-color:#ab750d; }
+#portal-feedback strong { display:block;font-size:.92rem;line-height:1.4; }
+#portal-feedback p { margin:7px 0 0;font-size:.85rem;line-height:1.6;overflow-wrap:anywhere;color:#51627a; }
+#portal-feedback button { font:inherit;cursor:pointer; }
+#portal-feedback .portal-feedback-close { flex:0 0 32px;width:32px;height:32px;margin:-5px -5px 0 auto;padding:0;border:0;border-radius:8px;background:transparent;color:#607089;font-size:1.4rem; }
+#portal-feedback .portal-feedback-close:hover { background:#f1f4f7; }
+#portal-feedback .portal-feedback-retry { min-height:40px;margin-top:12px;padding:8px 14px;border:1px solid #cbd6e3;border-radius:9px;background:white;color:#243b55;font-size:.8rem;font-weight:700; }
+#portal-feedback button:disabled { opacity:.6;cursor:wait; }
+#portal-feedback button:focus-visible { outline:3px solid #2563eb;outline-offset:2px; }
+@media(max-width:760px){#portal-feedback{top:154px;right:16px;max-height:calc(100dvh - 174px);overflow-y:auto;}}
 #staff-alert, #admin-alert, #page-alert, #status-alert { position: sticky; top: 12px; z-index: 20; box-shadow: 0 4px 16px #17274612; }
 #staff-alert button, #admin-alert button, #page-alert button, #status-alert button { margin-left: 10px; padding: 6px 12px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .staff-dialog, .cancel-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #dce5ed; border-radius: 20px; background: #fff; box-shadow: 0 24px 80px #12243b33; }

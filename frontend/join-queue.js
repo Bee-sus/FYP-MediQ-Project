@@ -131,8 +131,7 @@ document.querySelector('#refresh-queue-availability').addEventListener('click', 
   document.querySelector('#queue-availability-updated').textContent = error.message;
 }));
 document.querySelector('#join-queue-button').addEventListener('click', joinQueue);
-document.querySelector('#logout-button').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
-  window.location.replace('/');
+document.querySelector('#logout-button').addEventListener('click', event => {
+  window.mediqSignOut(event.currentTarget);
 });
 loadJoinQueuePage();

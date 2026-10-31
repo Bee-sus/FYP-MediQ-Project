@@ -454,9 +454,8 @@ document.querySelector('#refresh-button').addEventListener('click', () => {
   loadStaffDashboard();
   if (staffPage === 'appointments') loadStaffAppointments();
 });
-document.querySelector('#logout-button').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-  window.location.replace('/');
+document.querySelector('#logout-button').addEventListener('click', event => {
+  window.mediqSignOut(event.currentTarget);
 });
 
 if (staffPage !== 'profile') loadStaffDashboard();

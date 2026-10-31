@@ -118,10 +118,14 @@ router.post('/resend-verification', async (request, response) => {
 router.get('/me', authenticate, (request, response) => response.json({ user: request.user }));
 
 router.post('/logout', authenticate, async (request, response) => {
-  const cookie = String(request.headers.cookie || '').match(/(?:^|;\s*)mediq_session=([^;]+)/);
-  if (cookie) await pool.execute('DELETE FROM user_sessions WHERE token_hash = ?', [tokenHash(decodeURIComponent(cookie[1]))]);
-  response.setHeader('Set-Cookie', 'mediq_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
-  return response.json({ message: 'Signed out.' });
+  try {
+    const cookie = String(request.headers.cookie || '').match(/(?:^|;\s*)mediq_session=([^;]+)/);
+    if (cookie) await pool.execute('DELETE FROM user_sessions WHERE token_hash = ?', [tokenHash(decodeURIComponent(cookie[1]))]);
+    response.setHeader('Set-Cookie', 'mediq_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    return response.json({ message: 'Signed out.' });
+  } catch (_) {
+    return response.status(503).json({ error: 'Sign-out could not be completed. Please try again.' });
+  }
 });
 
 module.exports = router;

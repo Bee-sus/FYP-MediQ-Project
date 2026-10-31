@@ -62,6 +62,7 @@ async function api(path, options = {}) {
     window.location.replace('/patient-login.html');
     throw new Error('Sign in required.');
   }
+  if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('The server could not process this request. Please try again.');
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(data.error || 'The request could not be completed.');
@@ -72,8 +73,11 @@ async function api(path, options = {}) {
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST' });
-  window.location.replace('/');
+  await window.mediqSignOut(document.querySelector('#logout-button'));
+}
+
+function patientFailure(error) {
+  return error instanceof TypeError ? 'Connection lost. The request was not confirmed. Check your connection and try again.' : error.message;
 }
 
 async function identifyPatient() {
@@ -141,28 +145,60 @@ function historyRow(item) {
   return row;
 }
 
+let historyRequestVersion = 0;
+let historyState = { status: '', page: 1, totalPages: 1, loaded: false };
+let historyFailed = false;
 async function loadHistoryPage(status = '', requestedPage = 1) {
-  const query = new URLSearchParams({ page: requestedPage });
-  if (status) query.set('status', status);
-  const data = await api(`/api/patient/history?${query}`);
+  const version = ++historyRequestVersion;
   const content = document.querySelector('#page-content');
+  if (!document.querySelector('#history-records')) {
   content.innerHTML = `
     <div class="filter-bar" role="group" aria-label="Filter queue history">
-      ${['', 'completed', 'cancelled', 'skipped'].map((value) => `<button type="button" data-history-filter="${value}" class="${status === value ? 'active' : ''}">${value === 'skipped' ? 'Skipped (legacy)' : value || 'All'}</button>`).join('')}
+      ${['', 'completed', 'cancelled', 'skipped'].map((value) => `<button type="button" data-history-filter="${value}">${value === 'skipped' ? 'Skipped (legacy)' : value || 'All'}</button>`).join('')}
     </div>
+    <p id="history-feedback" class="activity-count" role="status" aria-live="polite"></p>
     <div id="history-records" class="records-card"></div>
-    <div class="pagination"><button id="previous-page" type="button">← Previous</button><span>Page ${data.page} of ${data.totalPages}</span><button id="next-page" type="button">Next →</button></div>
+    <div class="pagination"><button id="previous-page" type="button" disabled>← Previous</button><span id="history-page"></span><button id="next-page" type="button" disabled>Next →</button></div>
   `;
+  document.querySelectorAll('[data-history-filter]').forEach(button => button.addEventListener('click', () => loadHistoryPage(button.dataset.historyFilter, 1)));
+  document.querySelector('#previous-page').addEventListener('click', () => loadHistoryPage(historyState.status, historyState.page - 1));
+  document.querySelector('#next-page').addEventListener('click', () => loadHistoryPage(historyState.status, historyState.page + 1));
+  }
   const records = document.querySelector('#history-records');
-  if (data.items.length) records.replaceChildren(...data.items.map(historyRow));
-  else records.innerHTML = '<div class="feature-empty"><strong>No matching queue records</strong><p>Your queue activity will appear here.</p></div>';
-  document.querySelectorAll('[data-history-filter]').forEach((button) => button.addEventListener('click', () => loadHistoryPage(button.dataset.historyFilter, 1)));
   const previous = document.querySelector('#previous-page');
   const next = document.querySelector('#next-page');
-  previous.disabled = data.page <= 1;
-  next.disabled = data.page >= data.totalPages;
-  previous.addEventListener('click', () => loadHistoryPage(status, data.page - 1));
-  next.addEventListener('click', () => loadHistoryPage(status, data.page + 1));
+  content.setAttribute('aria-busy', 'true');
+  previous.disabled = true; next.disabled = true;
+  document.querySelector('#history-feedback').textContent = 'Loading queue history…';
+  try {
+    const query = new URLSearchParams({ page: requestedPage });
+    if (status) query.set('status', status);
+    const data = await api(`/api/patient/history?${query}`);
+    if (version !== historyRequestVersion) return;
+    historyState = { status, page: data.page, totalPages: data.totalPages, loaded: true };
+    if (data.items.length) records.replaceChildren(...data.items.map(historyRow));
+    else records.innerHTML = '<div class="feature-empty"><strong>No matching queue records</strong><p>Your queue activity will appear here.</p></div>';
+    document.querySelectorAll('[data-history-filter]').forEach(button => {
+      const active = button.dataset.historyFilter === status;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    document.querySelector('#history-page').textContent = `Page ${data.page} of ${data.totalPages}`;
+    document.querySelector('#history-feedback').textContent = '';
+    if (historyFailed) window.mediqFeedback('Queue history refreshed.');
+    historyFailed = false;
+  } catch (error) {
+    if (version !== historyRequestVersion || error.message === 'Sign in required.') return;
+    historyFailed = true;
+    document.querySelector('#history-feedback').textContent = historyState.loaded ? 'Could not refresh. Your previous queue history is still shown.' : 'Queue history could not be loaded.';
+    window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Queue history unavailable', retry: () => loadHistoryPage(status, requestedPage) });
+  } finally {
+    if (version === historyRequestVersion) {
+      content.setAttribute('aria-busy', 'false');
+      previous.disabled = !historyState.loaded || historyState.page <= 1;
+      next.disabled = !historyState.loaded || historyState.page >= historyState.totalPages;
+    }
+  }
 }
 
 let patientAppointmentItems = [];
@@ -179,10 +215,30 @@ function renderPatientAppointments() {
 
 async function refreshPatientAppointments() {
   const version = ++patientAppointmentVersion;
-  const data = await api('/api/patient/appointments');
-  if (version !== patientAppointmentVersion) return;
-  patientAppointmentItems = data.appointments;
-  renderPatientAppointments();
+  try {
+    const data = await api('/api/patient/appointments');
+    if (version !== patientAppointmentVersion) return;
+    patientAppointmentItems = data.appointments;
+    renderPatientAppointments();
+  } catch (error) { if (version === patientAppointmentVersion) throw error; }
+}
+
+async function showAppointmentOutcome(message) {
+  window.mediqFeedback(message, { title: 'Appointment updated' });
+  async function refreshList() {
+    try {
+      await refreshPatientAppointments();
+      window.mediqFeedback('Appointment activity is up to date.');
+    } catch (error) {
+      if (error.message === 'Sign in required.') return;
+      window.mediqFeedback(`${message} The appointment list could not refresh. Your change is saved.`, { type: 'warning', retry: refreshList, retryLabel: 'Refresh list' });
+    }
+  }
+  try { await refreshPatientAppointments(); }
+  catch (error) {
+    if (error.message === 'Sign in required.') return;
+    window.mediqFeedback(`${message} The appointment list could not refresh. Your change is saved.`, { type: 'warning', retry: refreshList, retryLabel: 'Refresh list' });
+  }
 }
 
 function appointmentCard(item) {
@@ -215,9 +271,12 @@ function appointmentCard(item) {
     cancel.disabled = true; cancel.textContent = 'Cancelling…';
     try {
       const result = await api(`/api/patient/appointments/${item.id}/cancel`, { method: 'POST' });
-      showAlert(result.message);
-      await refreshPatientAppointments();
-    } catch (error) { showAlert(error.message, 'error'); }
+      item.status = 'cancelled';
+      renderPatientAppointments();
+      await showAppointmentOutcome(result.message);
+    } catch (error) {
+      if (error.message !== 'Sign in required.') window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Cancellation not confirmed' });
+    }
     finally { cancel.disabled = false; cancel.textContent = 'Cancel appointment'; }
   });
   if (item.status === 'reschedule_proposed') {
@@ -240,9 +299,12 @@ function appointmentCard(item) {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ decision, appointmentDate: item.appointmentDate, appointmentTime: item.appointmentTime }),
           });
-          showAlert(result.message);
-          await refreshPatientAppointments();
-        } catch (error) { showAlert(error.message, 'error'); }
+          item.status = decision === 'accept' ? 'approved' : 'cancelled';
+          renderPatientAppointments();
+          await showAppointmentOutcome(result.message);
+        } catch (error) {
+          if (error.message !== 'Sign in required.') window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Response not confirmed' });
+        }
         finally { actions.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
       });
       actions.append(button);
@@ -304,17 +366,17 @@ async function submitAppointment(event) {
   button.disabled = true;
   try {
     const result = await api('/api/patient/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    showAlert(result.message);
     form.reset();
     form.elements.serviceId.value = payload.serviceId;
     form.elements.appointmentTime.replaceChildren(new Option('Select a date first', ''));
     form.elements.appointmentTime.disabled = true;
     status.hidden = true;
-    await refreshPatientAppointments();
+    await showAppointmentOutcome(result.message);
   } catch (error) {
-    status.textContent = error.message;
+    status.textContent = patientFailure(error);
     status.className = 'inline-status error';
     status.hidden = false;
+    if (error.message !== 'Sign in required.') window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Request not confirmed' });
   } finally { button.disabled = form.elements.appointmentTime.disabled; }
 }
 
@@ -329,12 +391,21 @@ function notificationCard(item) {
   card.querySelector('small').textContent = new Intl.DateTimeFormat('en-MY', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt));
   card.querySelector('i').textContent = item.readAt ? '' : 'New';
   card.addEventListener('click', async () => {
-    if (!item.readAt) {
-      await api(`/api/patient/notifications/${item.id}/read`, { method: 'PATCH' });
-      card.classList.remove('unread');
-      card.querySelector('i').textContent = '';
+    if (card.disabled) return;
+    card.disabled = true;
+    try {
+      if (!item.readAt) {
+        await api(`/api/patient/notifications/${item.id}/read`, { method: 'PATCH' });
+        item.readAt = new Date().toISOString();
+        card.classList.remove('unread');
+        card.querySelector('i').textContent = '';
+      }
+      window.location.assign(item.type === 'appointment' ? '/appointments.html' : item.type === 'queue' ? '/queue-status.html' : '/patient-dashboard.html');
+    } catch (error) {
+      if (error.message !== 'Sign in required.') window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Could not open notification', retry: () => card.click() });
+    } finally {
+      card.disabled = false;
     }
-    window.location.assign(item.type === 'appointment' ? '/appointments.html' : item.type === 'queue' ? '/queue-status.html' : '/patient-dashboard.html');
   });
   return card;
 }
@@ -362,9 +433,20 @@ async function loadNotificationsPage() {
   const button = document.querySelector('#read-all');
   button.disabled = !data.unreadCount;
   button.addEventListener('click', async () => {
-    const result = await api('/api/patient/notifications/read-all', { method: 'PATCH' });
-    showAlert(result.message);
-    await loadNotificationsPage();
+    if (button.disabled) return;
+    button.disabled = true; button.textContent = 'Marking as read…';
+    try {
+      const result = await api('/api/patient/notifications/read-all', { method: 'PATCH' });
+      data.notifications.forEach(item => { item.readAt = item.readAt || new Date().toISOString(); });
+      list.querySelectorAll('.notification-card').forEach(card => { card.classList.remove('unread'); card.querySelector('i').textContent = ''; });
+      data.unreadCount = 0;
+      window.mediqFeedback(result.message);
+    } catch (error) {
+      if (error.message !== 'Sign in required.') window.mediqFeedback(patientFailure(error), { type: 'error', title: 'Could not update notifications', retry: () => button.click() });
+    } finally {
+      button.disabled = !data.unreadCount;
+      button.textContent = 'Mark all as read';
+    }
   });
 }
 

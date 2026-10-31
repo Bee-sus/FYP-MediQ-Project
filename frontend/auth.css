@@ -147,3 +147,5 @@ body.verify-body .verify-page { width:min(100%,580px);margin:0 auto; }
 .signin-help p { margin:8px 0; }
 .signin-help a { color:var(--blue-dark);font-weight:700; }
 .signin-help [hidden] { display:none; }
+.signin-support { margin-top:18px;text-align:center; }
+.signin-support>div { text-align:left; }

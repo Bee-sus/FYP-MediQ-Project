@@ -176,6 +176,7 @@ router.delete('/patients/:patientId',async(request,response)=>{
   await connection.execute('DELETE FROM user_sessions WHERE user_id=?',[id]);
   await connection.execute('DELETE FROM email_verification_tokens WHERE user_id=?',[id]);
   await connection.execute('DELETE FROM patient_email_codes WHERE user_id=?',[id]);
+  await connection.execute('DELETE FROM password_reset_codes WHERE user_id=?',[id]);
   await connection.execute('DELETE FROM notifications WHERE patient_id=?',[id]);
   const crypto=require('crypto');
   await connection.execute(`UPDATE users SET full_name='Deleted patient',email=?,password_hash=?,phone_number=NULL,birth_date=NULL,gender=NULL,identification_type=NULL,identification_number=NULL,profile_picture_url=NULL,email_verified_at=NULL,is_active=FALSE,deleted_at=CURRENT_TIMESTAMP WHERE id=? AND role='patient'`,[`deleted-${id}-${crypto.randomBytes(12).toString('hex')}@example.invalid`,crypto.randomBytes(64).toString('hex'),id]);

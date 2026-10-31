@@ -48,3 +48,15 @@ CREATE TABLE IF NOT EXISTS patient_email_codes (
   send_window DATETIME NULL,
   CONSTRAINT fk_patient_email_code_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  user_id BIGINT UNSIGNED PRIMARY KEY,
+  session_hash CHAR(64) NOT NULL UNIQUE,
+  code_hash CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  requested_at DATETIME NOT NULL,
+  request_count TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  request_window DATETIME NOT NULL,
+  CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

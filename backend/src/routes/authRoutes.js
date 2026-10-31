@@ -9,6 +9,7 @@ const {createPatientVerification}=require('../services/patientOtpService');
 const { validateIdentity } = require('../services/patientIdentity');
 const router = express.Router();
 router.use(require('./patientVerificationRoutes'));
+router.use(require('./passwordRecoveryRoutes'));
 const roles = new Set(['patient', 'staff', 'admin']);
 const genders = new Set(['female', 'male', 'other', 'prefer-not-to-say']);
 

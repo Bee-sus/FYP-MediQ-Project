@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail,sendPatientOtpEmail } = require('../src/services/emailVerificationService');
+const { sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail,sendPatientOtpEmail,sendPasswordRecoveryEmail } = require('../src/services/emailVerificationService');
 
 test('queue call email uses SMTP acceptance and includes the correct ticket and service', async () => {
   Object.assign(process.env, {NODE_ENV:'test',EMAIL_DELIVERY_MODE:'smtp',SMTP_HOST:'smtp.example.test',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'unused'});
@@ -11,6 +11,17 @@ test('queue call email uses SMTP acceptance and includes the correct ticket and 
 
 const keys = ['NODE_ENV', 'EMAIL_DELIVERY_MODE', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'APP_BASE_URL'];
 const original = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+
+test('password recovery preview is explicitly limited to local development',async()=>{
+ Object.assign(process.env,{NODE_ENV:'development',EMAIL_DELIVERY_MODE:'preview'});
+ expect(await sendPasswordRecoveryEmail({email:'staff@example.test',code:'123456'})).toEqual({sent:false,previewCode:'123456'});
+});
+test('production reset emails do not return the code and change notices contain no password',async()=>{
+ Object.assign(process.env,{NODE_ENV:'production',EMAIL_DELIVERY_MODE:'preview',SMTP_HOST:'smtp.example.test',SMTP_USER:'sender@example.test',SMTP_PASSWORD:'unused'});
+ const sendMail=jest.fn().mockResolvedValue({accepted:['staff@example.test']});jest.spyOn(nodemailer,'createTransport').mockReturnValue({sendMail});
+ expect(await sendPasswordRecoveryEmail({email:'staff@example.test',code:'123456'})).toEqual({sent:true});
+ await sendPasswordRecoveryEmail({email:'staff@example.test',changed:true});expect(sendMail.mock.calls[1][0].text).not.toContain('123456');expect(sendMail.mock.calls[1][0].subject).toContain('password was changed');
+});
 
 test('Patient OTP preview codes are only exposed in explicit development preview mode',async()=>{
  Object.assign(process.env,{NODE_ENV:'development',EMAIL_DELIVERY_MODE:'preview'});

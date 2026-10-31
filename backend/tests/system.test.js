@@ -85,6 +85,7 @@ describe('system endpoints', () => {
     ['/staff-login.html', 'Staff sign in'],
     ['/admin-login.html', 'Administrator sign in'],
     ['/terms.html', 'Terms and Conditions &amp; Privacy Notice'],
+    ['/forgot-password.html', 'Forgot your password?'],
   ])('serves the authentication page %s', async (path, heading) => {
     const response = await request(app).get(path);
 

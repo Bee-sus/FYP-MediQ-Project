@@ -83,4 +83,14 @@ async function sendPatientOtpEmail({email,code}){
  return {sent:Boolean(result.accepted?.length)};
 }
 
-module.exports = { createVerificationToken, sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail, sendPatientOtpEmail, hashToken };
+async function sendPasswordRecoveryEmail({email,code,changed=false}){
+ if(useLocalEmailPreview())return changed?{sent:false}:{sent:false,previewCode:code};
+ if(!process.env.SMTP_HOST||!process.env.SMTP_USER||!process.env.SMTP_PASSWORD)return {sent:false};
+ const transport=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE).toLowerCase()==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASSWORD},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000});
+ const result=await transport.sendMail({from:process.env.SMTP_FROM||process.env.SMTP_USER,to:email,
+  subject:changed?'Your MediQ password was changed':'Your MediQ password reset code',
+  text:changed?'Your MediQ password has been changed. All existing sessions have been signed out. If you did not make this change, contact the clinic immediately.':`Your MediQ password reset code is ${code}.\n\nIt expires in 10 minutes. Use the newest code and do not share it. If you did not request a reset, ignore this email; your password will stay unchanged.`});
+ return {sent:Boolean(result.accepted?.length)};
+}
+
+module.exports = { createVerificationToken, sendVerificationEmail, sendStaffWelcomeEmail, sendQueueCallEmail, sendPatientOtpEmail, sendPasswordRecoveryEmail, hashToken };
